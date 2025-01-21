@@ -179,6 +179,9 @@ This is probably the latest one as of now. It introduced a couple tricks on top 
 2. Normalizes advantages
 3. Token Level KL (to be completely honest, I read the implementation from TRL for RLOO trainer and I don't know what it is doing. Interested readers can take a look. I guess I understand what the original author tries to do just that given kl_coef is a scalar and reward model only gives a single score per example not per token, so I do think token-level KL and sequence level KL are the same computationally.)
 
+## Disclaimer
+For simplicity, I have left out lots of details to focus on the more essentials. I did not mention anything about the reward model for example, which is where you typically get your reward from. This is because I don't think the source of reward is important, all you need is some sort of signal. I also didn't mention anaything about the reference policy model, since it is also a manual construct that prevents the model from diverging too much from the base SFT model, but hope those would be captured when you actually start reading the code.
+
 ## References
 1. https://lilianweng.github.io/posts/2018-02-19-rl-overview/ 
 2. https://arxiv.org/pdf/1707.06347
