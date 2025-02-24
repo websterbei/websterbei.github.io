@@ -170,7 +170,7 @@ In the second stage, one typically uses instruction fine tuning dataset containi
 ## The End
 Now hope you have a better understanding of the Vision Language Model architectures and how they are trained. In terms of reasoning and overall quality, there is still a gap between SOTA language models and SOTA VLMs at least in the open source world. So VLMs do not appear as smart of SOTA LLMs. In terms of applications, chat with image input is also not as demanded as LLMs since most questions people have day to day can get away without vision. 
 
-VLMs, however, are seeing a potentially even greater potential in computer use. There has been numerious fine tuned VLMs for understanding your browser content. Given that HTML / webpage especially those with javascript and dynamically loaded content are so hard (and unnecessary) to parse, handling computer use via VLM seem to provide a good alternative.
+VLMs, however, are seeing a perhaps even greater potential in computer use. There has been numerous fine tuned VLMs for understanding your browser content. Given that HTML / webpage especially those with javascript and dynamically loaded content are so hard (and unnecessary) to parse, handling computer use via VLM seem to provide a good alternative.
 
 General agents, just like autonomous driving, will need a brain (or multiple brains) behind the stages, namely perception, planning and control. VLM will be critical to solve the perception stage, and potentially part of the control stage (given that you might need a VLM to tell you how/where to take an action).
 
