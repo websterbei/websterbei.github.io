@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <link rel="icon" type="image/jpeg" href="/assets/profile.jpg">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>So Many RLHF Algorithms</title>
+    <title>Hitchhiker's Guide to Vision Language Models</title>
     <!-- Include marked.js with full GFM support -->
     <script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
     <!-- Add KaTeX CSS -->
@@ -15,6 +15,12 @@
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
     <!-- Add GitHub-like CSS for Markdown -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/sindresorhus/github-markdown-css@4.0.0/github-markdown.min.css">
+    <!-- Add Mermaid -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <!-- Add Prism CSS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" rel="stylesheet" />
+    <!-- Optional: Choose a different theme like prism-okaidia or prism-tomorrow -->
+    <!-- <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css" rel="stylesheet" /> -->
     <style>
         .container {
             max-width: 800px;
@@ -41,7 +47,14 @@
         <div id="content" class="markdown-body"></div>
     </div>
 
+    <!-- Add Prism.js before the markdown loading script -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+
     <script>
+        // Initialize mermaid
+        mermaid.initialize({ startOnLoad: false });
+
         // Configure marked with full GFM support
         marked.setOptions({
             gfm: true,
@@ -56,9 +69,20 @@
 
         // Create marked instance with custom renderer
         const renderer = new marked.Renderer();
-        renderer.paragraph = function(text) {
-            return '<p>' + text + '</p>';
+        
+        // Modify the renderer.code function
+        renderer.code = function(code, language) {
+            if (language === 'mermaid') {
+                return `<div class="mermaid">${code}</div>`;
+            }
+            // Ensure the language class is properly set for Prism
+            const validLanguage = language || 'plaintext';
+            const escapedCode = code.replace(/&/g, '&amp;')
+                                   .replace(/</g, '&lt;')
+                                   .replace(/>/g, '&gt;');
+            return `<pre><code class="language-${validLanguage}">${escapedCode}</code></pre>`;
         };
+        
         marked.use({ renderer });
 
         // Function to load and render Markdown file
@@ -92,7 +116,11 @@
                 
                 document.getElementById('content').innerHTML = content;
                 
-                // Render LaTeX after Markdown is loaded
+                // Highlight all code blocks
+                Prism.highlightAll();
+                
+                // Run your existing post-processing
+                await mermaid.run();
                 renderMathInElement(document.getElementById('content'), {
                     delimiters: [
                         {left: '$$', right: '$$', display: true},
@@ -116,7 +144,7 @@
         }
 
         // Load a default Markdown file
-        loadMarkdown('RLHF.md');
+        loadMarkdown('Vision_Language_Models.md');
     </script>
 </body>
 </html>
