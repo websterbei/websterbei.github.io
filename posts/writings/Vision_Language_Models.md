@@ -128,7 +128,7 @@ used by InternVL
 
 **Others**  
 The choice of vision encoder somewhat guides the way you do preprocessing. 
-If you are not using CLIP or SigLIP, then you are not constrained by the fixed input resolution. In Qwen2 VL, a method called Naice Dynamic Resolution is introduced. Simply put, it converts your input image into a sequence of $28 \times 28$ patches, embed the patches, and then process the input sequence like a language model. Pixtral from Mistral AI does it similarly.
+If you are not using CLIP or SigLIP, then you are not constrained by the fixed input resolution. In Qwen2 VL, a method called Naive Dynamic Resolution is introduced. Simply put, it converts your input image into a sequence of $28 \times 28$ patches, embed the patches, and then process the input sequence like a language model. Pixtral from Mistral AI does it similarly.
 
 
 ### Projection Layer
