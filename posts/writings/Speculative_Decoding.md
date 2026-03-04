@@ -428,6 +428,9 @@ For simplicity, I focused on the algorithmic and architectural differences betwe
 1. Xia, Ge, Wang, Chen, Wei, Sui. Speculative Decoding: Exploiting Speculative Execution for Accelerating Seq2seq Generation (2022/2023). https://arxiv.org/abs/2203.16487
 2. Leviathan, Kalman, Matias. Fast Inference from Transformers via Speculative Decoding (2023). https://arxiv.org/abs/2211.17192
 3. Fu, Bailis, Stoica, Zhang. Break the Sequential Dependency of LLM Inference Using Lookahead Decoding (2024). https://arxiv.org/abs/2402.02057
-4. Medusa: Simple LLM Inference Acceleration Framework with Multiple Decoding Heads (2024)
-5. EAGLE / EAGLE2 / EAGLE3 papers and open implementations
-6. Recent block-parallel / denoising-style speculative decoding work (including DFlash-style approaches)
+4. Cai, Li, Geng, Peng, Lee, Chen, Dao. Medusa: Simple LLM Inference Acceleration Framework with Multiple Decoding Heads (2024). https://arxiv.org/abs/2401.10774
+5. Li, Wei, Zhang, Zhang. EAGLE: Speculative Sampling Requires Rethinking Feature Uncertainty (2024). https://arxiv.org/abs/2401.15077
+6. Li, Wei, Zhang, Zhang. EAGLE-2: Faster Inference of Language Models with Dynamic Draft Trees (2024). https://arxiv.org/abs/2406.16858
+7. Li, Wei, Zhang, Zhang. EAGLE-3: Scaling up Inference Acceleration of Large Language Models via Training-Time Test (2025). https://arxiv.org/abs/2503.01840
+8. Chen, Liang, Liu. DFlash: Block Diffusion for Flash Speculative Decoding (2025). https://arxiv.org/abs/2602.06036
+9. Zhang, Chen, Chen, He, Yuan, Zheng, Yang. FastEagle: A Fast and Efficient Multi-Token Speculative Decoding Framework (2025). https://arxiv.org/abs/2509.20416
