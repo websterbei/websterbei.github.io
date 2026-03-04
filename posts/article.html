@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <link rel="icon" type="image/jpeg" href="/assets/profile.jpg">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hitchhiker's Guide to Vision Language Models</title>
+    <title id="page-title">Loading...</title>
     <!-- Include marked.js with full GFM support -->
     <script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
     <!-- Add KaTeX CSS -->
@@ -35,16 +35,36 @@
             margin: 0 auto;
             text-align: justify;
         }
+        .markdown-body .math-display {
+            text-align: center;
+            margin: 1em 0;
+        }
         @media (max-width: 767px) {
             .markdown-body {
                 padding: 15px;
             }
         }
+        .error-message {
+            color: #d73a49;
+            background-color: #ffeef0;
+            border: 1px solid #f97583;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 20px 0;
+        }
+        .loading-message {
+            color: #586069;
+            text-align: center;
+            padding: 40px;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <div id="content" class="markdown-body"></div>
+        <div id="content" class="markdown-body">
+            <div class="loading-message">Loading article...</div>
+        </div>
     </div>
 
     <!-- Add Prism.js before the markdown loading script -->
@@ -85,14 +105,38 @@
         
         marked.use({ renderer });
 
+
+
+        // Function to get URL parameter
+        function getUrlParameter(name) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(name);
+        }
+
+        // Function to extract title from markdown content
+        function extractTitleFromMarkdown(text) {
+            const lines = text.split('\n');
+            for (let line of lines) {
+                line = line.trim();
+                if (line.startsWith('# ')) {
+                    return line.substring(2).trim();
+                }
+            }
+            return 'Article';
+        }
+
         // Function to load and render Markdown file
-        async function loadMarkdown(filename) {
+        async function loadMarkdown(filename, fallbackTitle = 'Article') {
             try {
                 const response = await fetch(`writings/${filename}`);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 const text = await response.text();
+                
+                // Extract title from markdown content
+                const extractedTitle = extractTitleFromMarkdown(text);
+                document.getElementById('page-title').textContent = extractedTitle;
                 
                 // Create temporary markers for LaTeX blocks
                 let latexBlocks = [];
@@ -109,9 +153,10 @@
                 // Parse markdown using marked
                 let content = marked.parse(processedText);
                 
-                // Restore LaTeX blocks
+                // Restore LaTeX blocks wrapped in a centered div so they
+                // break out of any <p> that marked may have placed them in.
                 latexBlocks.forEach(({placeholder, latex}) => {
-                    content = content.replace(placeholder, latex);
+                    content = content.replace(placeholder, `<div class="math-display">${latex}</div>`);
                 });
                 
                 document.getElementById('content').innerHTML = content;
@@ -139,12 +184,47 @@
                 });
             } catch (error) {
                 console.error('Error loading Markdown:', error);
-                document.getElementById('content').innerHTML = 'Error loading Markdown file: ' + error.message;
+                document.getElementById('content').innerHTML = `
+                    <div class="error-message">
+                        <strong>Error loading article:</strong> ${error.message}
+                        <br><br>
+                        Please check that the article exists and try again.
+                        <br>
+                        <a href="/">← Back to home</a>
+                    </div>
+                `;
+                document.getElementById('page-title').textContent = 'Error - Article Not Found';
             }
         }
 
-        // Load a default Markdown file
-        loadMarkdown('Vision_Language_Models.md');
+        // Main initialization
+        function init() {
+            // Get article parameter from URL
+            const articleParam = getUrlParameter('article');
+            
+            if (articleParam) {
+                // Try to load article directly by filename
+                const filename = articleParam.endsWith('.md') ? articleParam : `${articleParam}.md`;
+                loadMarkdown(filename);
+            } else {
+                // No article specified, show error
+                document.getElementById('content').innerHTML = `
+                    <div class="error-message">
+                        <strong>No article specified.</strong>
+                        <br><br>
+                        Please specify an article using the URL parameter, for example:
+                        <br>
+                        <code>?article=RLHF</code> or <code>?article=Vision_Language_Models</code>
+                        <br><br>
+                        <a href="/">← Back to home</a>
+                    </div>
+                `;
+                document.getElementById('page-title').textContent = 'No Article Specified';
+            }
+        }
+
+        // Initialize when page loads
+        init();
     </script>
 </body>
 </html>

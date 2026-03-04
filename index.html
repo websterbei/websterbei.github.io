@@ -66,19 +66,90 @@
         <h1>Webster Bei Yijie</h1>
     </div>
     <nav>
-        <ul class="post-list">
-            <li class="post-item">
-                <a href="/posts/RLHF.html" class="post-link">So Many RLHF Algorithms</a>
-                <!-- Add date when available -->
-                <div class="post-date">Posted on January 21, 2025</div>
-            </li>
-            <!-- Add more posts in the same format -->
-            <li class="post-item">
-                <a href="/posts/Vision_Language_Models.html" class="post-link">Hitchhiker's Guide to Vision Language Models</a>
-                <!-- Add date when available -->
-                <div class="post-date">Posted on February 18, 2025</div>
-            </li>
+        <ul id="post-list" class="post-list">
+            <!-- Posts will be dynamically loaded here -->
         </ul>
     </nav>
+
+    <script>
+        // Article configuration with metadata
+        const articleConfig = {
+            'RLHF.md': {
+                title: 'So Many RLHF Algorithms',
+                date: '2025-01-21',
+                slug: 'RLHF'
+            },
+            'Vision_Language_Models.md': {
+                title: 'Hitchhiker\'s Guide to Vision Language Models', 
+                date: '2025-02-18',
+                slug: 'Vision_Language_Models'
+            },
+        };
+
+
+
+        // Function to format date for display
+        function formatDate(dateStr) {
+            if (!dateStr) return 'Date not specified';
+            
+            try {
+                // Parse date as local time to avoid timezone issues
+                const [year, month, day] = dateStr.split('-').map(Number);
+                const date = new Date(year, month - 1, day); // month is 0-indexed
+                
+                if (isNaN(date.getTime())) {
+                    return dateStr; // Return original if can't parse
+                }
+                return date.toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                });
+            } catch (e) {
+                return dateStr;
+            }
+        }
+
+        // Function to get article slug from filename
+        function getSlug(filename) {
+            return filename.replace('.md', '');
+        }
+
+        // Function to load articles from configuration
+        function loadArticles() {
+            const postList = document.getElementById('post-list');
+            const articles = [];
+
+            // Load each configured article
+            for (const [filename, config] of Object.entries(articleConfig)) {
+                articles.push({
+                    filename: filename,
+                    slug: config.slug || getSlug(filename),
+                    title: config.title,
+                    date: config.date,
+                    sortDate: new Date(config.date || '1970-01-01')
+                });
+            }
+
+            // Sort articles by date (newest first)
+            articles.sort((a, b) => b.sortDate - a.sortDate);
+
+            // Generate HTML for articles
+            if (articles.length === 0) {
+                postList.innerHTML = '<li class="post-item">No articles found.</li>';
+                return;
+            }
+
+            postList.innerHTML = articles.map(article => `
+                <li class="post-item">
+                    <a href="/posts/article.html?article=${article.slug}" class="post-link">${article.title}</a>
+                    <div class="post-date">Posted on ${formatDate(article.date)}</div>
+                </li>
+            `).join('');
+        }
+
+        // Load articles when page loads
+        loadArticles();
+    </script>
 </body>
 </html>

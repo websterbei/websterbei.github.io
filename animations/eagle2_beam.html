@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EAGLE2 Beam Search</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body { overflow: hidden; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: #fff;
+      color: #1a1a1a;
+      display: flex;
+      justify-content: center;
+      padding: 24px 16px;
+    }
+    .container { max-width: 720px; width: 100%; }
+
+    /* ── Header ── */
+    .header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 16px; flex-wrap: wrap; gap: 8px;
+    }
+    .title {
+      font-size: 14px; font-weight: 700; color: #1a1a1a;
+    }
+    .title-sub { font-weight: 400; color: #888; font-size: 13px; }
+
+    /* ── Step indicator ── */
+    .step-bar {
+      display: flex; gap: 4px; align-items: center; margin-bottom: 16px;
+    }
+    .step-pill {
+      padding: 3px 10px; border-radius: 4px; font-size: 11px;
+      font-weight: 600; background: #f3f4f6; color: #9ca3af;
+      transition: all 0.3s;
+    }
+    .step-pill.active { background: #ede9fe; color: #7c3aed; }
+    .step-pill.done   { background: #dcfce7; color: #16a34a; }
+    .step-sep { color: #d4d4d4; font-size: 12px; }
+
+    /* ── Tree area ── */
+    .tree-area {
+      background: #fafafa; border: 1px solid #e8e8e8; border-radius: 8px;
+      padding: 20px; margin-bottom: 16px; min-height: 220px;
+      overflow-x: auto;
+    }
+    .tree-msg {
+      text-align: center; padding: 70px 0; color: #aaa; font-size: 14px;
+    }
+
+    /* ── Beam grid ── */
+    .beam-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .beam-header {
+      display: flex; align-items: center;
+    }
+    .beam-header .col-label {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.6px; color: #a3a3a3;
+    }
+    .col-beam  { width: 64px; flex-shrink: 0; }
+    .col-slot  { width: 110px; flex-shrink: 0; text-align: center; }
+
+    .beam-row {
+      display: flex; align-items: center; min-height: 38px;
+      transition: opacity 0.4s;
+    }
+    .beam-row.pruned { opacity: 0.2; }
+    .beam-row.winner { }
+
+    .beam-label {
+      width: 64px; flex-shrink: 0;
+      font-size: 11px; font-weight: 700; color: #7c3aed;
+    }
+
+    .beam-cell {
+      width: 110px; flex-shrink: 0;
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+    }
+
+    /* ── Token node ── */
+    .node {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 10px; border-radius: 5px; font-size: 13px;
+      font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+      font-weight: 500; white-space: nowrap;
+      border: 1px solid #d4d4d4; background: #fff; color: #333;
+      opacity: 0; transform: scale(0.9);
+      transition: all 0.3s ease;
+    }
+    .node.show { opacity: 1; transform: scale(1); }
+    .node .conf {
+      font-size: 10px; font-weight: 600; color: #a3a3a3;
+      font-family: inherit;
+    }
+
+    .node.candidate  { background: #f5f3ff; border-color: #c4b5fd; color: #5b21b6; }
+    .node.kept       { background: #ede9fe; border-color: #a78bfa; color: #5b21b6; }
+    .node.accepted   { background: #dcfce7; border-color: #86efac; color: #166534; }
+    .node.rejected   { background: #fee2e2; border-color: #fca5a5; color: #991b1b; text-decoration: line-through; }
+    .node.correction { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
+
+    .prune-tag {
+      font-size: 10px; color: #d4d4d4; font-weight: 600; font-style: italic;
+      opacity: 0; transition: opacity 0.3s;
+    }
+    .prune-tag.show { opacity: 1; }
+
+    /* ── Connector arrows between cells ── */
+    .beam-cell + .beam-cell { position: relative; }
+    .beam-cell + .beam-cell::before {
+      content: '→';
+      position: absolute;
+      left: -14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #d4d4d4;
+      font-size: 13px;
+      font-weight: 400;
+    }
+
+    /* ── Verdict row ── */
+    .verdict-row {
+      display: flex; align-items: center; min-height: 28px;
+    }
+    .verdict {
+      width: 22px; height: 22px; display: flex;
+      align-items: center; justify-content: center;
+      border-radius: 50%; font-size: 12px; font-weight: 700;
+      opacity: 0; transform: scale(0.4);
+      transition: all 0.25s ease;
+    }
+    .verdict.show { opacity: 1; transform: scale(1); }
+    .verdict-pass { background: #dcfce7; color: #16a34a; }
+    .verdict-fail { background: #fee2e2; color: #dc2626; }
+
+    /* ── Summary ── */
+    .summary { text-align: center; padding: 40px 0; }
+    .summary-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    .summary-detail { font-size: 13px; color: #666; line-height: 1.6; }
+    .summary-highlight { color: #7c3aed; font-weight: 600; }
+    .summary-green { color: #16a34a; font-weight: 600; }
+    .summary-dim { color: #999; }
+
+    /* ── Annotation ── */
+    .annotation {
+      font-size: 12px; color: #7c3aed; font-weight: 600;
+      text-align: center; margin-top: 4px;
+      opacity: 0; transition: opacity 0.4s;
+    }
+    .annotation.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="container" id="app"></div>
+
+  <script>
+    const BEAMS = {
+      prefix: 'The quick brown',
+      width: 2,
+      steps: [
+        {
+          label: 'Expand',
+          candidates: [
+            { path: ['fox'],   conf: [0.92] },
+            { path: ['cat'],   conf: [0.35] },
+          ],
+          kept: [0, 1],
+          annotation: 'Draft model proposes top candidates for t+1',
+        },
+        {
+          label: 'Expand',
+          candidates: [
+            { path: ['fox', 'jumps'], conf: [0.92, 0.88] },
+            { path: ['fox', 'runs'],  conf: [0.92, 0.31] },
+            { path: ['cat', 'sits'],  conf: [0.35, 0.52] },
+          ],
+          kept: [0, 1],
+          pruned: [2],
+          annotation: 'Expand each beam → rank by cumulative confidence → keep top-2',
+        },
+        {
+          label: 'Expand',
+          candidates: [
+            { path: ['fox', 'jumps', 'over'], conf: [0.92, 0.88, 0.85] },
+            { path: ['fox', 'runs', 'away'],  conf: [0.92, 0.31, 0.60] },
+          ],
+          kept: [0],
+          pruned: [1],
+          annotation: 'Continue — prune low-confidence path',
+        },
+      ],
+      finalTree: [
+        { path: ['fox', 'jumps', 'over'], accepted: [true, true, true], correction: null },
+        { path: ['fox', 'runs'],          accepted: [true, false],      correction: null },
+      ],
+      winnerIdx: 0,
+      correction: 'the',
+    };
+
+    const T = {
+      initial: 700,
+      nodeAppear: 150,
+      nodeSettle: 300,
+      annotationShow: 500,
+      pruneDelay: 500,
+      stepPause: 800,
+      verifyToken: 350,
+      correctionIn: 500,
+      finalPause: 600,
+    };
+
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    class Eagle2BeamAnimation {
+      constructor(root) {
+        this.root = root;
+        this.playing = false;
+        this.build();
+        this.play();
+      }
+
+      build() {
+        const stepPills = BEAMS.steps.map((s, i) =>
+          `<span class="step-pill" id="sp${i}">Step ${i + 1}</span>`
+        ).join('<span class="step-sep">→</span>');
+
+        this.root.innerHTML = `
+          <div class="header">
+            <div class="title">EAGLE2 Beam Search <span class="title-sub">— tree construction + verification</span></div>
+          </div>
+          <div class="step-bar">
+            ${stepPills}
+            <span class="step-sep">→</span>
+            <span class="step-pill" id="spVerify">Verify</span>
+          </div>
+          <div class="tree-area" id="treeArea"><div class="tree-msg">Starting…</div></div>`;
+
+        this.els = {
+          tree:   this.root.querySelector('#treeArea'),
+        };
+      }
+
+      setStep(idx) {
+        BEAMS.steps.forEach((_, i) => {
+          const el = document.getElementById(`sp${i}`);
+          el.classList.toggle('active', i === idx);
+          el.classList.toggle('done', i < idx);
+        });
+        const vEl = document.getElementById('spVerify');
+        vEl.classList.toggle('active', idx === 'verify');
+        vEl.classList.toggle('done', idx === 'done');
+      }
+
+      async play() {
+        if (this.playing) return;
+        this.playing = true;
+        this.setStep(-1);
+        this.els.tree.innerHTML = '<div class="tree-msg">Starting…</div>';
+        await sleep(T.initial);
+
+        for (let i = 0; i < BEAMS.steps.length; i++) {
+          await this.showStep(i);
+        }
+
+        await this.showVerification();
+        await sleep(4000);
+        this.playing = false;
+        this.play();
+      }
+
+      buildGridHTML(candidates, keptSet, prunedSet) {
+        const maxLen = Math.max(...candidates.map(c => c.path.length));
+
+        let hdr = '<div class="beam-header"><div class="col-beam"></div>';
+        for (let c = 0; c < maxLen; c++) {
+          hdr += `<div class="col-slot col-label">t+${c + 1}</div>`;
+        }
+        hdr += '</div>';
+
+        let rows = '';
+        candidates.forEach((cand, ri) => {
+          const isPruned = prunedSet && prunedSet.has(ri);
+          const isKept = keptSet.has(ri);
+          rows += `<div class="beam-row${isPruned ? ' pruned' : ''}" id="br${ri}">`;
+          rows += `<div class="beam-label">Beam ${ri + 1}</div>`;
+          for (let c = 0; c < maxLen; c++) {
+            rows += '<div class="beam-cell">';
+            if (c < cand.path.length) {
+              const cls = isPruned ? 'candidate' : (isKept ? 'kept' : 'candidate');
+              const confStr = cand.conf[c] ? (cand.conf[c] * 100).toFixed(0) + '%' : '';
+              rows += `<span class="node ${cls}" id="n${ri}_${c}">${cand.path[c]} <span class="conf">${confStr}</span></span>`;
+            }
+            rows += '</div>';
+          }
+          if (isPruned) {
+            rows += '<div style="width:60px;display:flex;align-items:center;"><span class="prune-tag" id="pt${ri}">pruned</span></div>';
+          }
+          rows += '</div>';
+        });
+
+        return hdr + rows;
+      }
+
+      async showStep(idx) {
+        this.setStep(idx);
+        const step = BEAMS.steps[idx];
+        const keptSet = new Set(step.kept);
+        const prunedSet = new Set(step.pruned || []);
+
+        this.els.tree.innerHTML = `
+          <div class="beam-grid" id="beamGrid">
+            ${this.buildGridHTML(step.candidates, keptSet, prunedSet)}
+          </div>
+          <div class="annotation" id="annot">${step.annotation}</div>`;
+
+        // animate nodes appearing
+        for (let c = 0; c < Math.max(...step.candidates.map(ca => ca.path.length)); c++) {
+          for (let r = 0; r < step.candidates.length; r++) {
+            const el = document.getElementById(`n${r}_${c}`);
+            if (el) el.classList.add('show');
+          }
+          await sleep(T.nodeAppear);
+        }
+        await sleep(T.nodeSettle);
+
+        // show annotation
+        const annot = document.getElementById('annot');
+        if (annot) annot.classList.add('show');
+        await sleep(T.annotationShow);
+
+        // prune
+        if (step.pruned) {
+          for (const ri of step.pruned) {
+            const row = document.getElementById(`br${ri}`);
+            if (row) row.classList.add('pruned');
+            const pt = this.els.tree.querySelector(`#pt\\$\\{ri\\}`);
+          }
+          // show prune tags
+          this.els.tree.querySelectorAll('.prune-tag').forEach(el => el.classList.add('show'));
+          await sleep(T.pruneDelay);
+        }
+
+        await sleep(T.stepPause);
+      }
+
+      async showVerification() {
+        this.setStep('verify');
+
+        const winner = BEAMS.finalTree[BEAMS.winnerIdx];
+        const loser = BEAMS.finalTree.length > 1 ? BEAMS.finalTree[1] : null;
+        const maxLen = winner.path.length;
+
+        let html = '<div class="beam-grid">';
+        html += '<div class="beam-header"><div class="col-beam"></div>';
+        for (let c = 0; c < maxLen + 1; c++) {
+          html += `<div class="col-slot col-label">${c < maxLen ? `t+${c + 1}` : 'correction'}</div>`;
+        }
+        html += '</div>';
+
+        // winner row
+        html += '<div class="beam-row" id="vr0"><div class="beam-label" style="color:#16a34a">Best</div>';
+        for (let c = 0; c < maxLen; c++) {
+          const confStr = (winner.conf ? winner.conf[c] : null);
+          html += `<div class="beam-cell"><span class="node kept show" id="vn0_${c}">${winner.path[c]}</span><span class="verdict" id="vv0_${c}"></span></div>`;
+        }
+        html += `<div class="beam-cell"><span class="node correction" id="vcorr" style="opacity:0;transform:scale(0.9)">${BEAMS.correction}</span></div>`;
+        html += '</div>';
+
+        // loser row (if exists)
+        if (loser) {
+          html += '<div class="beam-row" id="vr1"><div class="beam-label" style="color:#dc2626">Alt</div>';
+          for (let c = 0; c < maxLen; c++) {
+            if (c < loser.path.length) {
+              html += `<div class="beam-cell"><span class="node kept show" id="vn1_${c}">${loser.path[c]}</span><span class="verdict" id="vv1_${c}"></span></div>`;
+            } else {
+              html += '<div class="beam-cell"></div>';
+            }
+          }
+          html += '<div class="beam-cell"></div></div>';
+        }
+
+        html += '</div>';
+        html += '<div class="annotation" id="vannot">Target model verifies all candidate paths in one pass</div>';
+
+        this.els.tree.innerHTML = html;
+        await sleep(400);
+
+        const vannot = document.getElementById('vannot');
+        vannot.classList.add('show');
+        await sleep(400);
+
+        // verify winner path
+        for (let c = 0; c < winner.path.length; c++) {
+          const vd = document.getElementById(`vv0_${c}`);
+          const nd = document.getElementById(`vn0_${c}`);
+          const pass = winner.accepted[c];
+          vd.classList.add(pass ? 'verdict-pass' : 'verdict-fail');
+          vd.textContent = pass ? '✓' : '✗';
+          vd.classList.add('show');
+          nd.classList.remove('kept');
+          nd.classList.add(pass ? 'accepted' : 'rejected');
+          await sleep(T.verifyToken);
+        }
+
+        // verify loser path
+        if (loser) {
+          for (let c = 0; c < loser.path.length; c++) {
+            const vd = document.getElementById(`vv1_${c}`);
+            const nd = document.getElementById(`vn1_${c}`);
+            const pass = loser.accepted[c];
+            vd.classList.add(pass ? 'verdict-pass' : 'verdict-fail');
+            vd.textContent = pass ? '✓' : '✗';
+            vd.classList.add('show');
+            nd.classList.remove('kept');
+            nd.classList.add(pass ? 'accepted' : 'rejected');
+            await sleep(T.verifyToken);
+            if (!pass) break;
+          }
+          document.getElementById('vr1').classList.add('pruned');
+        }
+
+        await sleep(300);
+
+        // show correction
+        const corrEl = document.getElementById('vcorr');
+        corrEl.style.opacity = '1';
+        corrEl.style.transform = 'scale(1)';
+        await sleep(T.correctionIn);
+
+        // summary
+        vannot.textContent = '';
+        this.setStep('done');
+
+        await sleep(T.finalPause);
+
+        this.els.tree.innerHTML = `
+          <div class="summary">
+            <div class="summary-title">Tree verification complete</div>
+            <div class="summary-detail">
+              Beam search proposed <span class="summary-highlight">multiple candidate paths</span><br>
+              Target model verified all paths in <span class="summary-green">one forward pass</span><br>
+              Longest valid path: <span class="summary-green">${winner.path.join(' → ')} → ${BEAMS.correction}</span> (${winner.path.length + 1} tokens)<br>
+              <span class="summary-dim">EAGLE1 (greedy) would only propose one path — beam search gives more chances to find longer matches</span>
+            </div>
+          </div>`;
+      }
+    }
+
+    new Eagle2BeamAnimation(document.getElementById('app'));
+  </script>
+</body>
+</html>

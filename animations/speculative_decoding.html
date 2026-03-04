@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Speculative Decoding: Propose → Verify → Accept</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body { overflow: hidden; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: #fff;
+      color: #1a1a1a;
+      display: flex;
+      justify-content: center;
+      padding: 24px 16px;
+    }
+
+    .container { max-width: 720px; width: 100%; }
+
+    /* ── Phase indicator ── */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .phase-bar { display: flex; align-items: center; gap: 6px; }
+
+    .phase-step {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #c0c0c0;
+      transition: color 0.3s;
+    }
+    .phase-step.active { color: #1a1a1a; }
+
+    .phase-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #e0e0e0;
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+    .phase-step.active .phase-dot { box-shadow: 0 0 0 3px rgba(0,0,0,0.06); }
+
+    .phase-arrow { color: #d0d0d0; font-size: 13px; margin: 0 2px; }
+
+
+    /* ── Section labels ── */
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #999;
+      margin-bottom: 6px;
+    }
+
+    /* ── Output sequence ── */
+    .output-area {
+      background: #fafafa;
+      border: 1px solid #e8e8e8;
+      border-radius: 8px;
+      padding: 14px 16px;
+      min-height: 48px;
+      margin-bottom: 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+
+    /* ── Token chips ── */
+    .token {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px 11px;
+      border-radius: 5px;
+      font-size: 14px;
+      font-family: "SF Mono", "Fira Code", "Fira Mono", Menlo, Consolas, monospace;
+      font-weight: 500;
+      min-width: 36px;
+      text-align: center;
+      transition: all 0.3s ease;
+      white-space: nowrap;
+    }
+
+    .token-prefix { background: #f0f0f0; border: 1px solid #d4d4d4; color: #333; }
+
+    .token-draft {
+      background: #dbeafe; border: 1px solid #93c5fd; color: #1d4ed8;
+      opacity: 0; transform: translateY(6px);
+    }
+    .token-draft.show { opacity: 1; transform: translateY(0); }
+
+    .token-accepted { background: #dcfce7; border: 1px solid #86efac; color: #166534; }
+    .token-rejected { background: #fee2e2; border: 1px solid #fca5a5; color: #991b1b; text-decoration: line-through; }
+    .token-correction { background: #fef3c7; border: 1px solid #fcd34d; color: #92400e; }
+    .token-skipped { opacity: 0.25; }
+
+    .token-new {
+      animation: token-pop 0.35s ease both;
+    }
+    @keyframes token-pop {
+      from { opacity: 0; transform: translateY(8px) scale(0.95); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* ── Cycle workspace ── */
+    .cycle-area {
+      background: #fafafa;
+      border: 1px solid #e8e8e8;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 16px;
+      min-height: 140px;
+      position: relative;
+      transition: opacity 0.3s;
+    }
+
+    .cycle-msg {
+      text-align: center;
+      padding: 30px 0;
+      color: #aaa;
+      font-size: 14px;
+    }
+
+    .cycle-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .cycle-row:last-child { margin-bottom: 0; }
+
+    .model-badge {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 4px 10px;
+      border-radius: 5px;
+      min-width: 88px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+    .model-badge.draft { background: #dbeafe; color: #1e40af; }
+    .model-badge.target { background: #f3e8ff; color: #6b21a8; }
+
+    .row-arrow { color: #ccc; font-size: 14px; flex-shrink: 0; }
+
+    .slot-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: flex-start; }
+
+    /* ── Verdict marks ── */
+    .slot {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .verdict {
+      width: 22px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      font-size: 12px;
+      font-weight: 700;
+      opacity: 0;
+      transform: scale(0.4);
+      transition: all 0.25s ease;
+    }
+    .verdict.show { opacity: 1; transform: scale(1); }
+    .verdict-pass { background: #dcfce7; color: #16a34a; }
+    .verdict-fail { background: #fee2e2; color: #dc2626; }
+
+    /* ── Stats bar ── */
+    .stats {
+      display: flex;
+      gap: 20px;
+      font-size: 13px;
+      color: #888;
+      flex-wrap: wrap;
+    }
+    .stat-val { font-weight: 700; color: #333; margin-left: 4px; }
+
+    /* ── Summary ── */
+    .summary {
+      text-align: center;
+      padding: 20px 0;
+    }
+    .summary-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #1a1a1a;
+      margin-bottom: 6px;
+    }
+    .summary-detail { font-size: 13px; color: #666; line-height: 1.6; }
+    .summary-highlight { color: #16a34a; font-weight: 600; }
+    .summary-dim { color: #999; }
+  </style>
+</head>
+<body>
+  <div class="container" id="app"></div>
+
+  <script>
+    const SCENARIO = {
+      prefix: ['The', 'quick', 'brown'],
+      cycles: [
+        { draft: ['fox', 'jumps', 'over', 'a'],    accepted: [true, true, true, false],  correction: 'the' },
+        { draft: ['lazy', 'dog', 'today', '!'],     accepted: [true, true, false, false], correction: '.' },
+      ],
+    };
+
+    const TIMING = {
+      initialPause:  800,
+      draftToken:    220,
+      draftSettle:   350,
+      verifyToken:   380,
+      verifySettle:  250,
+      correctionIn:  400,
+      acceptPause:   500,
+      mergeOut:      300,
+      mergeIn:       100,
+      cyclePause:    1000,
+    };
+
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    class SpecDecAnimation {
+      constructor(root) {
+        this.root = root;
+        this.output = [...SCENARIO.prefix];
+        this.passes = 0;
+        this.playing = false;
+        this.build();
+        this.play();
+      }
+
+      build() {
+        this.root.innerHTML = `
+          <div class="header">
+            <div class="phase-bar">
+              <div class="phase-step" data-phase="propose"><div class="phase-dot"></div><span>Propose</span></div>
+              <span class="phase-arrow">→</span>
+              <div class="phase-step" data-phase="verify"><div class="phase-dot"></div><span>Verify</span></div>
+              <span class="phase-arrow">→</span>
+              <div class="phase-step" data-phase="accept"><div class="phase-dot"></div><span>Accept</span></div>
+            </div>
+          </div>
+          <div class="section-label">Output sequence</div>
+          <div class="output-area" id="outputArea"></div>
+          <div class="section-label">Current cycle</div>
+          <div class="cycle-area" id="cycleArea"><div class="cycle-msg">Waiting…</div></div>
+          <div class="stats">
+            <div>Cycle:<span class="stat-val" id="statCycle">–</span></div>
+            <div>Tokens generated:<span class="stat-val" id="statTokens">${this.output.length}</span></div>
+            <div>Target passes:<span class="stat-val" id="statPasses">0</span></div>
+          </div>`;
+
+        this.els = {
+          output:    this.root.querySelector('#outputArea'),
+          cycle:     this.root.querySelector('#cycleArea'),
+          statCycle: this.root.querySelector('#statCycle'),
+          statTok:   this.root.querySelector('#statTokens'),
+          statPass:  this.root.querySelector('#statPasses'),
+          phases:    this.root.querySelectorAll('.phase-step'),
+        };
+        this.renderOutput();
+      }
+
+      /* ── helpers ── */
+
+      renderOutput(newCount = 0) {
+        const start = this.output.length - newCount;
+        this.els.output.innerHTML = this.output.map((t, i) => {
+          const cls = i >= start && newCount > 0 ? 'token token-prefix token-new' : 'token token-prefix';
+          const delay = i >= start ? `animation-delay:${(i - start) * 60}ms` : '';
+          return `<span class="${cls}" style="${delay}">${t}</span>`;
+        }).join('');
+      }
+
+      setPhase(name) {
+        const colors = { propose: '#3b82f6', verify: '#8b5cf6', accept: '#22c55e' };
+        this.els.phases.forEach(el => {
+          const p = el.dataset.phase;
+          const active = p === name;
+          el.classList.toggle('active', active);
+          el.querySelector('.phase-dot').style.background = active ? colors[p] : '#e0e0e0';
+        });
+      }
+
+      clearPhase() {
+        this.els.phases.forEach(el => {
+          el.classList.remove('active');
+          el.querySelector('.phase-dot').style.background = '#e0e0e0';
+        });
+      }
+
+      updateStats(cycleNum) {
+        this.els.statCycle.textContent = cycleNum;
+        this.els.statTok.textContent = this.output.length;
+        this.els.statPass.textContent = this.passes;
+      }
+
+      /* ── main loop ── */
+
+      async play() {
+        if (this.playing) return;
+        this.playing = true;
+
+        this.output = [...SCENARIO.prefix];
+        this.passes = 0;
+        this.clearPhase();
+        this.renderOutput();
+        this.updateStats('–');
+        this.els.cycle.innerHTML = '<div class="cycle-msg">Starting…</div>';
+
+        await sleep(TIMING.initialPause);
+
+        for (let i = 0; i < SCENARIO.cycles.length; i++) {
+          await this.runCycle(SCENARIO.cycles[i], i);
+          if (i < SCENARIO.cycles.length - 1) {
+            this.clearPhase();
+            this.els.cycle.innerHTML = '<div class="cycle-msg">Next cycle…</div>';
+            await sleep(TIMING.cyclePause);
+          }
+        }
+
+        this.clearPhase();
+        this.showSummary();
+        await sleep(4000);
+        this.playing = false;
+        this.play();
+      }
+
+      async runCycle(cycle, idx) {
+        this.updateStats(idx + 1);
+        const firstReject = cycle.accepted.indexOf(false);
+        const acceptedCount = firstReject === -1 ? cycle.draft.length : firstReject;
+
+        /* ── PROPOSE ── */
+        this.setPhase('propose');
+
+        this.els.cycle.innerHTML = `
+          <div class="cycle-row">
+            <div class="model-badge draft">Draft</div>
+            <span class="row-arrow">→</span>
+            <div class="slot-row" id="draftSlots"></div>
+          </div>
+          <div class="cycle-row" id="targetRow" style="visibility:hidden">
+            <div class="model-badge target">Target</div>
+            <span class="row-arrow">→</span>
+            <div class="slot-row" id="corrSlots"></div>
+          </div>`;
+
+        const draftSlots = this.els.cycle.querySelector('#draftSlots');
+
+        for (let i = 0; i < cycle.draft.length; i++) {
+          const slot = document.createElement('div');
+          slot.className = 'slot';
+          const tok = document.createElement('span');
+          tok.className = 'token token-draft';
+          tok.textContent = cycle.draft[i];
+          const vd = document.createElement('span');
+          vd.className = 'verdict';
+          slot.append(tok, vd);
+          draftSlots.appendChild(slot);
+          await sleep(30);
+          tok.classList.add('show');
+          await sleep(TIMING.draftToken);
+        }
+
+        await sleep(TIMING.draftSettle);
+
+        /* ── VERIFY ── */
+        this.setPhase('verify');
+        this.passes++;
+        this.updateStats(idx + 1);
+
+        const slots = draftSlots.querySelectorAll('.slot');
+
+        for (let i = 0; i < cycle.draft.length; i++) {
+          if (i > acceptedCount) break; // past first rejection — skip
+
+          const tok  = slots[i].querySelector('.token');
+          const vd   = slots[i].querySelector('.verdict');
+          const pass = cycle.accepted[i];
+
+          vd.classList.add(pass ? 'verdict-pass' : 'verdict-fail');
+          vd.textContent = pass ? '✓' : '✗';
+          await sleep(20);
+          vd.classList.add('show');
+
+          tok.classList.remove('token-draft');
+          tok.classList.add(pass ? 'token-accepted' : 'token-rejected');
+
+          await sleep(TIMING.verifyToken);
+
+          if (!pass) break;
+        }
+
+        // dim unverified tokens after rejection
+        for (let i = acceptedCount + 1; i < cycle.draft.length; i++) {
+          slots[i].querySelector('.token').classList.add('token-skipped');
+        }
+
+        await sleep(TIMING.verifySettle);
+
+        // show correction
+        const targetRow = this.els.cycle.querySelector('#targetRow');
+        targetRow.style.visibility = 'visible';
+        const corrSlots = this.els.cycle.querySelector('#corrSlots');
+
+        for (let i = 0; i < acceptedCount; i++) {
+          const spacer = document.createElement('div');
+          spacer.className = 'slot';
+          const ph = document.createElement('span');
+          ph.className = 'token';
+          ph.style.visibility = 'hidden';
+          ph.textContent = cycle.draft[i];
+          const vdSpacer = document.createElement('span');
+          vdSpacer.className = 'verdict';
+          vdSpacer.style.visibility = 'hidden';
+          spacer.append(ph, vdSpacer);
+          corrSlots.appendChild(spacer);
+        }
+
+        const corrSlot = document.createElement('div');
+        corrSlot.className = 'slot';
+        const corrTok = document.createElement('span');
+        corrTok.className = 'token token-correction';
+        corrTok.textContent = cycle.correction;
+        corrTok.style.opacity = '0';
+        corrTok.style.transform = 'translateY(6px)';
+        const corrLabel = document.createElement('span');
+        corrLabel.className = 'verdict';
+        corrLabel.style.visibility = 'hidden';
+        corrSlot.append(corrTok, corrLabel);
+        corrSlots.appendChild(corrSlot);
+        await sleep(30);
+        corrTok.style.opacity = '1';
+        corrTok.style.transform = 'translateY(0)';
+
+        await sleep(TIMING.correctionIn);
+
+        /* ── ACCEPT ── */
+        this.setPhase('accept');
+
+        const newTokens = [];
+        for (let i = 0; i < acceptedCount; i++) newTokens.push(cycle.draft[i]);
+        newTokens.push(cycle.correction);
+
+        this.output.push(...newTokens);
+
+        await sleep(TIMING.acceptPause);
+
+        this.els.cycle.style.opacity = '0.3';
+        await sleep(TIMING.mergeOut);
+
+        this.renderOutput(newTokens.length);
+        this.updateStats(idx + 1);
+
+        await sleep(TIMING.mergeIn);
+        this.els.cycle.style.opacity = '1';
+      }
+
+      showSummary() {
+        const generated = this.output.length - SCENARIO.prefix.length;
+        this.els.cycle.innerHTML = `
+          <div class="summary">
+            <div class="summary-title">Generation complete</div>
+            <div class="summary-detail">
+              <span class="summary-highlight">${this.output.length} tokens</span> produced using only
+              <span class="summary-highlight">${this.passes} target forward passes</span><br>
+              <span class="summary-dim">Standard AR decoding would require ${generated} passes for the same ${generated} new tokens</span>
+            </div>
+          </div>`;
+      }
+    }
+
+    new SpecDecAnimation(document.getElementById('app'));
+  </script>
+</body>
+</html>
