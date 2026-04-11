@@ -74,12 +74,17 @@
     <script>
         // Article configuration with metadata
         const articleConfig = {
-            'RLHF.md': {
+            'RLHF/RLHF.md': {
                 title: 'So Many RLHF Algorithms',
                 date: '2025-01-21',
                 slug: 'RLHF'
             },
-            'Vision_Language_Models.md': {
+            'Speculative_Decoding/Speculative_Decoding.md': {
+                title: 'Speculative Decoding: What it is, Why it Matters, and the Major Variants',
+                date: '2026-03-03',
+                slug: 'Speculative_Decoding'
+            },
+            'Vision_Language_Models/Vision_Language_Models.md': {
                 title: 'Hitchhiker\'s Guide to Vision Language Models', 
                 date: '2025-02-18',
                 slug: 'Vision_Language_Models'
@@ -112,7 +117,8 @@
 
         // Function to get article slug from filename
         function getSlug(filename) {
-            return filename.replace('.md', '');
+            const base = filename.split('/').pop() || filename;
+            return base.replace('.md', '');
         }
 
         // Function to load articles from configuration

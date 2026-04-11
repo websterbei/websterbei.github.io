@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EAGLE3 Training-Time Test — Attention Mask</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { overflow: hidden; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: #fff; color: #1a1a1a;
+      display: flex; justify-content: center;
+      padding: 16px 12px;
+    }
+
+    .container { max-width: 740px; width: 100%; }
+
+    .title-bar { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+    .title-sub { font-weight: 400; color: #888; font-size: 12px; }
+
+    .annot {
+      min-height: 20px; margin-bottom: 10px;
+      font-size: 12px; font-weight: 600; color: #7c3aed;
+      transition: opacity 0.3s;
+    }
+
+    /* ── Token sequence row ── */
+    .token-row {
+      display: flex; gap: 4px; margin-bottom: 14px;
+      align-items: center; flex-wrap: wrap;
+    }
+    .token-row-label {
+      font-size: 10px; font-weight: 700; color: #999;
+      text-transform: uppercase; letter-spacing: 0.5px;
+      margin-right: 4px;
+    }
+    .seq-tok {
+      padding: 3px 8px; border-radius: 4px;
+      font-size: 12px; font-weight: 600;
+      font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+      opacity: 0; transform: scale(0.9);
+      transition: all 0.3s ease;
+    }
+    .seq-tok.show { opacity: 1; transform: scale(1); }
+    .seq-tok.gray   { background: #f3f4f6; border: 1px solid #d1d5db; color: #374151; }
+    .seq-tok.blue   { background: #dbeafe; border: 1px solid #93c5fd; color: #1e40af; }
+    .seq-tok.yellow { background: #fef3c7; border: 1px solid #fcd34d; color: #92400e; }
+
+    .round-sep {
+      width: 1px; height: 22px; background: #e5e7eb; margin: 0 2px;
+      opacity: 0; transition: opacity 0.3s;
+    }
+    .round-sep.show { opacity: 1; }
+
+    /* ── Mask matrix ── */
+    .mask-wrap {
+      display: flex; gap: 0; align-items: flex-start;
+      overflow-x: auto;
+    }
+
+    .mask-label-area {
+      display: flex; flex-direction: column; align-items: center;
+      margin-right: 2px;
+    }
+    .mask-axis-label {
+      font-size: 9px; font-weight: 700; color: #aaa;
+      text-transform: uppercase; letter-spacing: 0.4px;
+      writing-mode: vertical-rl; text-orientation: mixed;
+      margin-bottom: 4px;
+      transform: rotate(180deg);
+    }
+
+    .mask-table { border-collapse: collapse; }
+    .mask-table td, .mask-table th {
+      width: 42px; height: 32px; text-align: center; vertical-align: middle;
+      font-size: 11px; font-weight: 600;
+      border: 1px solid #e5e7eb;
+      position: relative;
+    }
+    .mask-table th {
+      border: none; background: none;
+      font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+      font-size: 10px;
+    }
+    .mask-table th.key-label {
+      font-size: 9px; color: #aaa; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.3px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .th-gray   { color: #374151; }
+    .th-blue   { color: #1e40af; }
+    .th-yellow { color: #92400e; }
+
+    .query-th {
+      text-align: right !important; padding-right: 6px !important;
+      border: none !important; width: auto !important; min-width: 40px;
+    }
+
+    .mask-cell {
+      background: #fff;
+      transition: background 0.25s;
+    }
+
+    .mask-check {
+      font-size: 15px; font-weight: 700;
+      opacity: 0; transform: scale(0.5);
+      display: inline-block;
+      transition: all 0.2s ease;
+    }
+    .mask-check.show { opacity: 1; transform: scale(1); }
+
+    .check-gray   { color: #dc2626; }
+    .check-blue   { color: #dc2626; }
+    .check-yellow { color: #dc2626; }
+
+    .cell-highlight { background: #f5f3ff; }
+
+    /* hidden rows/cols */
+    .mask-hidden { display: none; }
+    .mask-visible { display: table-row; }
+    .col-hidden { display: none; }
+    .col-visible { display: table-cell; }
+
+    /* ── Legend ── */
+    .legend {
+      display: flex; gap: 14px; margin-top: 12px; flex-wrap: wrap;
+      font-size: 10px; color: #888;
+    }
+    .legend-item { display: flex; align-items: center; gap: 4px; }
+    .leg-swatch {
+      width: 14px; height: 14px; border-radius: 3px;
+      font-size: 10px; display: flex; align-items: center;
+      justify-content: center;
+    }
+    .leg-gray   { background: #f3f4f6; border: 1px solid #d1d5db; }
+    .leg-blue   { background: #dbeafe; border: 1px solid #93c5fd; }
+    .leg-yellow { background: #fef3c7; border: 1px solid #fcd34d; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="title-bar">Training-Time Test <span class="title-sub">— attention causal mask across prediction rounds</span></div>
+    <div class="annot" id="annot">&nbsp;</div>
+
+    <div class="token-row" id="tokenRow"></div>
+
+    <div class="mask-wrap">
+      <div class="mask-label-area">
+        <div class="mask-axis-label">Query</div>
+      </div>
+      <table class="mask-table" id="maskTable"></table>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><div class="leg-swatch leg-gray"></div>Training data (ground truth)</div>
+      <div class="legend-item"><div class="leg-swatch leg-blue"></div>Round 1 predictions (from model)</div>
+      <div class="legend-item"><div class="leg-swatch leg-yellow"></div>Round 2 predictions (from model)</div>
+    </div>
+  </div>
+
+  <script>
+    const TOKENS = [
+      { text: 'How', round: 'gray' },
+      { text: 'can', round: 'gray' },
+      { text: 'I',   round: 'gray' },
+      { text: 'are', round: 'blue' },
+      { text: 'we',  round: 'blue' },
+      { text: 'do',  round: 'blue' },
+      { text: 'you',  round: 'yellow' },
+      { text: 'help', round: 'yellow' },
+      { text: 'it',   round: 'yellow' },
+    ];
+
+    // TTT attention mask as 3×3 blocks (each 3×3):
+    //   gray  block: gray→gray  = lower triangular
+    //   blue  block: blue→gray  = lower triangular, blue→blue = diagonal
+    //   yellow block: yellow→gray = lower triangular, yellow→blue = diagonal, yellow→yellow = diagonal
+    function buildMask() {
+      const n = TOKENS.length;
+      const R = 3; // tokens per round
+      const mask = Array.from({length: n}, () => Array(n).fill(false));
+
+      for (let q = 0; q < n; q++) {
+        const qRound = Math.floor(q / R); // 0=gray, 1=blue, 2=yellow
+        const qLane  = q % R;
+
+        for (let k = 0; k < n; k++) {
+          const kRound = Math.floor(k / R);
+          const kLane  = k % R;
+
+          if (kRound > qRound) continue; // can't attend to future rounds
+
+          if (kRound === 0) {
+            // gray block: lower triangular (attend to gray[0..qLane])
+            if (kLane <= qLane) mask[q][k] = true;
+          } else if (kRound <= qRound) {
+            // blue or yellow block from a prior or same round: diagonal (same lane only)
+            if (kLane === qLane) mask[q][k] = true;
+          }
+        }
+      }
+
+      return mask;
+    }
+
+    const MASK = buildMask();
+
+    const PHASES = [
+      { round: 'gray',   indices: [0, 1, 2], label: 'Step 1 — Native training: standard causal attention on ground-truth tokens' },
+      { round: 'blue',   indices: [3, 4, 5], label: 'Step 2 — 1st draft round: predicted tokens fed as input (not ground truth)' },
+      { round: 'yellow', indices: [6, 7, 8], label: 'Step 3 — 2nd draft round: continues from round 1 predictions' },
+    ];
+
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    function buildDOM() {
+      const tokenRow = document.getElementById('tokenRow');
+      let trHTML = '<span class="token-row-label">Sequence</span>';
+      let prevRound = null;
+      TOKENS.forEach((t, i) => {
+        if (prevRound && t.round !== prevRound) {
+          trHTML += `<span class="round-sep" id="sep-${i}"></span>`;
+        }
+        trHTML += `<span class="seq-tok ${t.round}" id="st-${i}">${t.text}</span>`;
+        prevRound = t.round;
+      });
+      tokenRow.innerHTML = trHTML;
+
+      const table = document.getElementById('maskTable');
+      let html = '<thead><tr><th class="query-th"></th><th class="key-label" id="key-axis" style="opacity:0">Key →</th>';
+      // key headers will be added dynamically via column visibility
+      TOKENS.forEach((t, i) => {
+        html += `<th class="th-${t.round} col-hidden" id="kh-${i}">${t.text}</th>`;
+      });
+      html += '</tr></thead><tbody>';
+      TOKENS.forEach((qt, qi) => {
+        html += `<tr class="mask-hidden" id="row-${qi}">`;
+        html += `<th class="query-th th-${qt.round}">${qt.text}</th>`;
+        html += `<td class="col-hidden"></td>`; // spacer for key-axis label column
+        TOKENS.forEach((kt, ki) => {
+          const has = MASK[qi][ki];
+          const checkCls = `check-${qt.round}`;
+          html += `<td class="mask-cell col-hidden" id="mc-${qi}-${ki}">`;
+          if (has) html += `<span class="mask-check ${checkCls}" id="ck-${qi}-${ki}">✓</span>`;
+          html += '</td>';
+        });
+        html += '</tr>';
+      });
+      html += '</tbody>';
+      table.innerHTML = html;
+    }
+
+    function setAnnot(txt) { document.getElementById('annot').innerHTML = txt; }
+
+    function showToken(i) { document.getElementById(`st-${i}`)?.classList.add('show'); }
+    function showSep(i) { document.getElementById(`sep-${i}`)?.classList.add('show'); }
+
+    function showCol(i) {
+      document.getElementById(`kh-${i}`).classList.replace('col-hidden', 'col-visible');
+      TOKENS.forEach((_, qi) => {
+        document.getElementById(`mc-${qi}-${i}`)?.classList.replace('col-hidden', 'col-visible');
+      });
+    }
+
+    function showRow(i) {
+      document.getElementById(`row-${i}`).classList.replace('mask-hidden', 'mask-visible');
+      // also ensure the spacer cell is visible
+      const row = document.getElementById(`row-${i}`);
+      const spacer = row.querySelectorAll('td')[0];
+      if (spacer) spacer.classList.replace('col-hidden', 'col-visible');
+    }
+
+    function showCheck(qi, ki) {
+      const el = document.getElementById(`ck-${qi}-${ki}`);
+      if (el) el.classList.add('show');
+    }
+
+    function highlightCell(qi, ki, on) {
+      const el = document.getElementById(`mc-${qi}-${ki}`);
+      if (el) el.classList.toggle('cell-highlight', on);
+    }
+
+    function resetAll() {
+      TOKENS.forEach((_, i) => {
+        document.getElementById(`st-${i}`).classList.remove('show');
+        document.getElementById(`kh-${i}`).classList.replace('col-visible', 'col-hidden');
+        document.getElementById(`row-${i}`).classList.replace('mask-visible', 'mask-hidden');
+        TOKENS.forEach((_, j) => {
+          const mc = document.getElementById(`mc-${i}-${j}`);
+          if (mc) { mc.classList.replace('col-visible', 'col-hidden'); mc.classList.remove('cell-highlight'); }
+          const ck = document.getElementById(`ck-${i}-${j}`);
+          if (ck) ck.classList.remove('show');
+        });
+        const spacer = document.getElementById(`row-${i}`)?.querySelectorAll('td')[0];
+        if (spacer) spacer.classList.replace('col-visible', 'col-hidden');
+      });
+      document.querySelectorAll('.round-sep').forEach(el => el.classList.remove('show'));
+      document.getElementById('key-axis').style.opacity = '0';
+      setAnnot('&nbsp;');
+    }
+
+    async function animate() {
+      resetAll();
+      await sleep(600);
+
+      for (const phase of PHASES) {
+        setAnnot(phase.label);
+
+        // show separator if needed
+        if (phase.indices[0] > 0) {
+          showSep(phase.indices[0]);
+          await sleep(150);
+        }
+
+        // show tokens in sequence row
+        for (const i of phase.indices) {
+          showToken(i);
+          await sleep(120);
+        }
+        await sleep(300);
+
+        // show columns in the mask
+        document.getElementById('key-axis').style.opacity = '1';
+        for (const i of phase.indices) {
+          showCol(i);
+          await sleep(80);
+        }
+        await sleep(200);
+
+        // show rows + fill in checkmarks row by row
+        for (const qi of phase.indices) {
+          showRow(qi);
+          await sleep(100);
+
+          // fill checkmarks left to right for this query row
+          for (let ki = 0; ki < TOKENS.length; ki++) {
+            if (MASK[qi][ki] && document.getElementById(`ck-${qi}-${ki}`)) {
+              highlightCell(qi, ki, true);
+              showCheck(qi, ki);
+              await sleep(80);
+              highlightCell(qi, ki, false);
+            }
+          }
+          await sleep(200);
+        }
+
+        await sleep(800);
+      }
+
+      setAnnot('Each round uses the model\'s own predictions as input — training simulates multi-step inference');
+      await sleep(5000);
+      animate();
+    }
+
+    buildDOM();
+    animate();
+  </script>
+</body>
+</html>

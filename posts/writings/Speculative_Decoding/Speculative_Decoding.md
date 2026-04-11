@@ -35,7 +35,7 @@ With speculation, we add a cheap proposer $q_\phi$:
 The key insight is that verifying $K$ tokens with the target model costs roughly the same as generating 1 token (since the bottleneck is memory bandwidth, not compute, and the KV cache operations parallelize well). So when the proposer guesses right, you get multiple tokens for the price of one.
 
 Here is an animation to illustrate:
-<iframe src="/animations/speculative_decoding.html" width="100%" height="420" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
+<iframe src="/posts/writings/Speculative_Decoding/animations/speculative_decoding.html" width="100%" height="420" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
 
 ### Why this actually speeds things up
 
@@ -173,7 +173,7 @@ Since multiple heads can each produce multiple candidates (e.g. top-k per head),
 - $M$ lightweight prediction heads (additional parameters)
 - Tree construction and verification logic (somewhat orthogonal; we can discuss this later)
 
-<iframe src="/animations/medusa.html" width="100%" height="500" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
+<iframe src="/posts/writings/Speculative_Decoding/animations/medusa.html" width="100%" height="500" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
 
 ### Benefits
 
@@ -224,7 +224,7 @@ At each token position $t$, the data flows like this:
 
 The frozen embedding and LM head are important: they lock the draft model's input/output space to the target model's vocabulary, so you never have tokenizer mismatch issues.
 
-<iframe src="/animations/eagle_architecture.html" width="100%" height="560" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
+<iframe src="/posts/writings/Speculative_Decoding/animations/eagle_architecture.html" width="100%" height="560" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
 
 ### How generation works
 
@@ -240,7 +240,7 @@ At inference time, the draft model runs autoregressive generation:
 
 The advantage of EAGLE1/2 over a standalone small LM is that the draft model sees the target model's hidden state directly. It doesn't have to independently figure out what the target model "thinks" — it gets told via $h_t$. This significantly improves first-position acceptance and usually helps deeper positions too. EAGLE1 and EAGLE2 essentially have the same architecture, but EAGLE2 adds beam search based on confidence to propose more tokens per position for a higher chance of acceptance.
 
-<iframe src="/animations/eagle2_beam.html" width="100%" height="480" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
+<iframe src="/posts/writings/Speculative_Decoding/animations/eagle2_beam.html" width="100%" height="480" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
 
 
 Since EAGLE drafting is autoregressive, generating $K$ draft tokens requires $K$ sequential forward passes through the draft model. Each pass conditions on the previous prediction: if that prediction happens to match the target model's output, the next pass receives the correct input and has a good chance of predicting correctly too. If a prediction is wrong, all subsequent predictions are likely wrong as well — but this doesn't matter, because verification stops at the first mismatch anyway.
@@ -262,7 +262,7 @@ $$
 $$
 The intuition is that different layers capture different kinds of information — early layers have more syntactic/local features, late layers have more semantic/global features. Giving the draft model access to multiple layers provides a richer signal for prediction.
 
-<iframe src="/animations/eagle3_architecture.html" width="100%" height="540" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
+<iframe src="/posts/writings/Speculative_Decoding/animations/eagle3_architecture.html" width="100%" height="540" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
 
 If only one feature layer is used, the projection degenerates to identity (no extra parameters).
 
@@ -278,7 +278,7 @@ The practical benefit for speculative decoding is that TTT attention can adapt m
 
 The following animation illustrates the layer-by-layer attention path during TTT training. Notice how each decoder layer at position $k$ attends to the corresponding layer at position $k-1$, and how the predicted (not ground truth) token is fed forward:
 
-<iframe src="/animations/eagle3_ttt.html" width="100%" height="480" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
+<iframe src="/posts/writings/Speculative_Decoding/animations/eagle3_ttt.html" width="100%" height="480" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
 
 ---
 
@@ -318,7 +318,7 @@ The verification step is identical to any other speculative method: target model
 - Candidate builder
 - Standard target verifier
 
-<iframe src="/animations/ngram.html" width="100%" height="520" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
+<iframe src="/posts/writings/Speculative_Decoding/animations/ngram.html" width="100%" height="520" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
 
 ### Benefits
 

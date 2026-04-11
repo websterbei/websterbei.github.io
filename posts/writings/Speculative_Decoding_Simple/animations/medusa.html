@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Medusa: Multi-Head Speculative Decoding</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body { overflow: hidden; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: #fff;
+      color: #1a1a1a;
+      display: flex;
+      justify-content: center;
+      padding: 24px 16px;
+    }
+
+    .container { max-width: 720px; width: 100%; }
+
+    /* ── Phase indicator ── */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .phase-bar { display: flex; align-items: center; gap: 6px; }
+    .phase-step {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 13px; font-weight: 600; color: #c0c0c0;
+      transition: color 0.3s;
+    }
+    .phase-step.active { color: #1a1a1a; }
+    .phase-dot {
+      width: 9px; height: 9px; border-radius: 50%;
+      background: #e0e0e0;
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+    .phase-step.active .phase-dot { box-shadow: 0 0 0 3px rgba(0,0,0,0.06); }
+    .phase-arrow { color: #d0d0d0; font-size: 13px; margin: 0 2px; }
+
+
+    /* ── Labels ── */
+    .section-label {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.8px; color: #999; margin-bottom: 6px;
+    }
+
+    /* ── Output ── */
+    .output-area {
+      background: #fafafa; border: 1px solid #e8e8e8; border-radius: 8px;
+      padding: 14px 16px; min-height: 48px; margin-bottom: 20px;
+      display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    }
+
+    /* ── Tokens ── */
+    .token {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 4px 11px; border-radius: 5px; font-size: 14px;
+      font-family: "SF Mono", "Fira Code", "Fira Mono", Menlo, Consolas, monospace;
+      font-weight: 500; min-width: 36px; text-align: center;
+      transition: all 0.3s ease; white-space: nowrap;
+    }
+    .token-prefix   { background: #f0f0f0; border: 1px solid #d4d4d4; color: #333; }
+    .token-pred     { background: #ccfbf1; border: 1px solid #5eead4; color: #0f766e;
+                      opacity: 0; transform: translateY(5px); transition: all 0.3s ease; }
+    .token-pred.show { opacity: 1; transform: translateY(0); }
+    .token-accepted  { background: #dcfce7; border: 1px solid #86efac; color: #166534; }
+    .token-rejected  { background: #fee2e2; border: 1px solid #fca5a5; color: #991b1b; text-decoration: line-through; }
+    .token-correction{ background: #fef3c7; border: 1px solid #fcd34d; color: #92400e; }
+    .token-skipped   { opacity: 0.25; }
+    .token-new { animation: token-pop 0.35s ease both; }
+    @keyframes token-pop {
+      from { opacity: 0; transform: translateY(8px) scale(0.95); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* ── Cycle area ── */
+    .cycle-area {
+      background: #fafafa; border: 1px solid #e8e8e8; border-radius: 8px;
+      padding: 20px; margin-bottom: 16px; min-height: 200px;
+      transition: opacity 0.3s;
+    }
+    .cycle-msg {
+      text-align: center; padding: 60px 0; color: #aaa; font-size: 14px;
+    }
+
+    /* ── Backbone visual ── */
+    .backbone-box {
+      background: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 8px;
+      padding: 12px 16px; margin-bottom: 0;
+      transition: all 0.4s;
+    }
+    .backbone-box.computing {
+      border-color: #a78bfa;
+      box-shadow: 0 0 0 3px rgba(167,139,250,0.15);
+    }
+    .backbone-title {
+      font-size: 12px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.5px; color: #7c3aed; margin-bottom: 4px;
+    }
+    .backbone-status {
+      font-size: 13px; color: #8b5cf6;
+      opacity: 0; transition: opacity 0.3s;
+    }
+    .backbone-status.show { opacity: 1; }
+
+    /* ── Connectors ── */
+    .connector-row {
+      display: flex; justify-content: space-around;
+      padding: 0 20px; height: 18px; position: relative;
+    }
+    .connector-tick {
+      width: 1px; height: 100%;
+      background: #d8d0f0;
+      opacity: 0; transition: opacity 0.3s;
+    }
+    .connector-tick.show { opacity: 1; }
+
+    /* ── Heads row ── */
+    .heads-row {
+      display: flex; gap: 8px; justify-content: space-around;
+      padding: 0 4px;
+    }
+    .head-col {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 6px; flex: 1; min-width: 0;
+    }
+    .head-badge {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.3px;
+      padding: 3px 10px; border-radius: 5px; white-space: nowrap;
+      background: #ede9fe; color: #6d28d9;
+      opacity: 0; transform: scale(0.9);
+      transition: all 0.3s ease;
+    }
+    .head-badge.show { opacity: 1; transform: scale(1); }
+    .head-badge.active {
+      background: #7c3aed; color: #fff;
+      box-shadow: 0 0 0 3px rgba(124,58,237,0.15);
+    }
+    .head-pos {
+      font-size: 10px; color: #a3a3a3; font-weight: 500;
+      opacity: 0; transition: opacity 0.3s;
+    }
+    .head-pos.show { opacity: 1; }
+
+    /* ── Verdicts ── */
+    .verdict {
+      width: 22px; height: 22px; display: flex;
+      align-items: center; justify-content: center;
+      border-radius: 50%; font-size: 12px; font-weight: 700;
+      opacity: 0; transform: scale(0.4);
+      transition: all 0.25s ease;
+    }
+    .verdict.show { opacity: 1; transform: scale(1); }
+    .verdict-pass { background: #dcfce7; color: #16a34a; }
+    .verdict-fail { background: #fee2e2; color: #dc2626; }
+
+    /* ── Correction row ── */
+    .correction-row {
+      display: flex; gap: 8px; justify-content: space-around;
+      padding: 0 4px; margin-top: 2px;
+    }
+    .corr-col {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; min-width: 0;
+    }
+
+    /* ── Parallel flash ── */
+    .parallel-note {
+      text-align: center; font-size: 11px; color: #8b5cf6;
+      font-weight: 600; letter-spacing: 0.3px;
+      margin-top: 4px;
+      opacity: 0; transition: opacity 0.4s;
+    }
+    .parallel-note.show { opacity: 1; }
+
+    /* ── Stats ── */
+    .stats {
+      display: flex; gap: 20px; font-size: 13px; color: #888; flex-wrap: wrap;
+    }
+    .stat-val { font-weight: 700; color: #333; margin-left: 4px; }
+
+    /* ── Summary ── */
+    .summary { text-align: center; padding: 30px 0; }
+    .summary-title { font-size: 15px; font-weight: 700; color: #1a1a1a; margin-bottom: 6px; }
+    .summary-detail { font-size: 13px; color: #666; line-height: 1.6; }
+    .summary-highlight { color: #16a34a; font-weight: 600; }
+    .summary-dim { color: #999; }
+  </style>
+</head>
+<body>
+  <div class="container" id="app"></div>
+
+  <script>
+    const SCENARIO = {
+      prefix: ['The', 'quick', 'brown'],
+      headNames: ['LM Head', 'Head 1', 'Head 2', 'Head 3'],
+      cycles: [
+        { predictions: ['fox', 'jumps', 'across', 'the'], accepted: [true, true, false, false], correction: 'over' },
+        { predictions: ['the', 'lazy', 'dog', 'today'],   accepted: [true, true, true, false],  correction: '.' },
+      ],
+    };
+
+    const T = {
+      initialPause: 800,
+      computeIn:    600,
+      computeHold:  500,
+      headsIn:      100,
+      predsAppear:  100,    // very fast — they appear in parallel
+      predsSettle:  500,
+      noteShow:     600,
+      verifyToken:  400,
+      verifySettle: 250,
+      correctionIn: 400,
+      acceptPause:  500,
+      mergeOut:     300,
+      mergeIn:      100,
+      cyclePause:   1000,
+    };
+
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    class MedusaAnimation {
+      constructor(root) {
+        this.root = root;
+        this.output = [...SCENARIO.prefix];
+        this.passes = 0;
+        this.playing = false;
+        this.build();
+        this.play();
+      }
+
+      build() {
+        this.root.innerHTML = `
+          <div class="header">
+            <div class="phase-bar">
+              <div class="phase-step" data-phase="compute"><div class="phase-dot"></div><span>Compute</span></div>
+              <span class="phase-arrow">→</span>
+              <div class="phase-step" data-phase="predict"><div class="phase-dot"></div><span>Predict</span></div>
+              <span class="phase-arrow">→</span>
+              <div class="phase-step" data-phase="verify"><div class="phase-dot"></div><span>Verify</span></div>
+              <span class="phase-arrow">→</span>
+              <div class="phase-step" data-phase="accept"><div class="phase-dot"></div><span>Accept</span></div>
+            </div>
+          </div>
+          <div class="section-label">Output sequence</div>
+          <div class="output-area" id="outputArea"></div>
+          <div class="section-label">Current cycle</div>
+          <div class="cycle-area" id="cycleArea"><div class="cycle-msg">Waiting…</div></div>
+          <div class="stats">
+            <div>Cycle:<span class="stat-val" id="statCycle">–</span></div>
+            <div>Tokens generated:<span class="stat-val" id="statTokens">${this.output.length}</span></div>
+            <div>Target passes:<span class="stat-val" id="statPasses">0</span></div>
+          </div>`;
+
+        this.els = {
+          output:    this.root.querySelector('#outputArea'),
+          cycle:     this.root.querySelector('#cycleArea'),
+          statCycle: this.root.querySelector('#statCycle'),
+          statTok:   this.root.querySelector('#statTokens'),
+          statPass:  this.root.querySelector('#statPasses'),
+          phases:    this.root.querySelectorAll('.phase-step'),
+        };
+        this.renderOutput();
+      }
+
+      renderOutput(newCount = 0) {
+        const start = this.output.length - newCount;
+        this.els.output.innerHTML = this.output.map((t, i) => {
+          const cls = i >= start && newCount > 0 ? 'token token-prefix token-new' : 'token token-prefix';
+          const delay = i >= start ? `animation-delay:${(i - start) * 60}ms` : '';
+          return `<span class="${cls}" style="${delay}">${t}</span>`;
+        }).join('');
+      }
+
+      setPhase(name) {
+        const colors = { compute: '#8b5cf6', predict: '#0d9488', verify: '#8b5cf6', accept: '#22c55e' };
+        this.els.phases.forEach(el => {
+          const p = el.dataset.phase;
+          const active = p === name;
+          el.classList.toggle('active', active);
+          el.querySelector('.phase-dot').style.background = active ? colors[p] : '#e0e0e0';
+        });
+      }
+      clearPhase() {
+        this.els.phases.forEach(el => {
+          el.classList.remove('active');
+          el.querySelector('.phase-dot').style.background = '#e0e0e0';
+        });
+      }
+
+      updateStats(cycleNum) {
+        this.els.statCycle.textContent = cycleNum;
+        this.els.statTok.textContent = this.output.length;
+        this.els.statPass.textContent = this.passes;
+      }
+
+      async play() {
+        if (this.playing) return;
+        this.playing = true;
+
+        this.output = [...SCENARIO.prefix];
+        this.passes = 0;
+        this.clearPhase();
+        this.renderOutput();
+        this.updateStats('–');
+        this.els.cycle.innerHTML = '<div class="cycle-msg">Starting…</div>';
+        await sleep(T.initialPause);
+
+        for (let i = 0; i < SCENARIO.cycles.length; i++) {
+          await this.runCycle(SCENARIO.cycles[i], i);
+          if (i < SCENARIO.cycles.length - 1) {
+            this.clearPhase();
+            this.els.cycle.innerHTML = '<div class="cycle-msg">Next cycle…</div>';
+            await sleep(T.cyclePause);
+          }
+        }
+
+        this.clearPhase();
+        this.showSummary();
+        await sleep(4000);
+        this.playing = false;
+        this.play();
+      }
+
+      async runCycle(cycle, idx) {
+        this.updateStats(idx + 1);
+        const numHeads = SCENARIO.headNames.length;
+        const firstReject = cycle.accepted.indexOf(false);
+        const acceptedCount = firstReject === -1 ? numHeads : firstReject;
+
+        // Build cycle DOM
+        let headsHTML = '';
+        for (let i = 0; i < numHeads; i++) {
+          headsHTML += `
+            <div class="head-col">
+              <div class="head-badge" id="hb${i}">${SCENARIO.headNames[i]}</div>
+              <div class="head-pos" id="hp${i}">t+${i + 1}</div>
+              <span class="token token-pred" id="pt${i}">${cycle.predictions[i]}</span>
+              <span class="verdict" id="vd${i}"></span>
+            </div>`;
+        }
+
+        let corrHTML = '';
+        for (let i = 0; i < numHeads; i++) {
+          corrHTML += `<div class="corr-col" id="cc${i}"></div>`;
+        }
+
+        let ticksHTML = '';
+        for (let i = 0; i < numHeads; i++) {
+          ticksHTML += `<div class="connector-tick" id="ct${i}"></div>`;
+        }
+
+        this.els.cycle.innerHTML = `
+          <div class="backbone-box" id="backbone">
+            <div class="backbone-title">Target Model Backbone</div>
+            <div class="backbone-status" id="backboneStatus">Computing hidden state h_t …</div>
+          </div>
+          <div class="connector-row">${ticksHTML}</div>
+          <div class="heads-row">${headsHTML}</div>
+          <div class="parallel-note" id="parallelNote">All heads predict in parallel from h_t</div>
+          <div class="correction-row" id="corrRow" style="visibility:hidden">${corrHTML}</div>`;
+
+        /* ── COMPUTE ── */
+        this.setPhase('compute');
+        const backbone = this.els.cycle.querySelector('#backbone');
+        const status = this.els.cycle.querySelector('#backboneStatus');
+        backbone.classList.add('computing');
+        status.classList.add('show');
+        this.passes++;
+        this.updateStats(idx + 1);
+        await sleep(T.computeIn);
+
+        // show connectors
+        for (let i = 0; i < numHeads; i++) {
+          this.els.cycle.querySelector(`#ct${i}`).classList.add('show');
+        }
+        await sleep(T.computeHold);
+
+        /* ── PREDICT ── */
+        this.setPhase('predict');
+        backbone.classList.remove('computing');
+        status.textContent = 'h_t ready';
+
+        // heads appear simultaneously
+        for (let i = 0; i < numHeads; i++) {
+          const badge = this.els.cycle.querySelector(`#hb${i}`);
+          const pos = this.els.cycle.querySelector(`#hp${i}`);
+          badge.classList.add('show');
+          pos.classList.add('show');
+          await sleep(T.headsIn);
+        }
+
+        // all prediction tokens appear nearly simultaneously
+        for (let i = 0; i < numHeads; i++) {
+          this.els.cycle.querySelector(`#hb${i}`).classList.add('active');
+        }
+        await sleep(80);
+        for (let i = 0; i < numHeads; i++) {
+          this.els.cycle.querySelector(`#pt${i}`).classList.add('show');
+          await sleep(T.predsAppear);
+        }
+        for (let i = 0; i < numHeads; i++) {
+          this.els.cycle.querySelector(`#hb${i}`).classList.remove('active');
+        }
+
+        const note = this.els.cycle.querySelector('#parallelNote');
+        note.classList.add('show');
+        await sleep(T.noteShow);
+        note.classList.remove('show');
+        await sleep(T.predsSettle);
+
+        /* ── VERIFY ── */
+        this.setPhase('verify');
+
+        for (let i = 0; i <= acceptedCount && i < numHeads; i++) {
+          const tok = this.els.cycle.querySelector(`#pt${i}`);
+          const vd  = this.els.cycle.querySelector(`#vd${i}`);
+          const pass = cycle.accepted[i];
+
+          vd.classList.add(pass ? 'verdict-pass' : 'verdict-fail');
+          vd.textContent = pass ? '✓' : '✗';
+          await sleep(20);
+          vd.classList.add('show');
+          tok.classList.remove('token-pred');
+          tok.classList.add(pass ? 'token-accepted' : 'token-rejected');
+          await sleep(T.verifyToken);
+          if (!pass) break;
+        }
+
+        // dim unverified tokens
+        for (let i = acceptedCount + 1; i < numHeads; i++) {
+          this.els.cycle.querySelector(`#pt${i}`).classList.add('token-skipped');
+        }
+
+        await sleep(T.verifySettle);
+
+        // show correction
+        const corrRow = this.els.cycle.querySelector('#corrRow');
+        corrRow.style.visibility = 'visible';
+        const corrCol = this.els.cycle.querySelector(`#cc${acceptedCount}`);
+        const corrTok = document.createElement('span');
+        corrTok.className = 'token token-correction';
+        corrTok.textContent = cycle.correction;
+        corrTok.style.opacity = '0';
+        corrTok.style.transform = 'translateY(5px)';
+        corrCol.appendChild(corrTok);
+        await sleep(30);
+        corrTok.style.opacity = '1';
+        corrTok.style.transform = 'translateY(0)';
+        await sleep(T.correctionIn);
+
+        /* ── ACCEPT ── */
+        this.setPhase('accept');
+
+        const newTokens = [];
+        for (let i = 0; i < acceptedCount; i++) newTokens.push(cycle.predictions[i]);
+        newTokens.push(cycle.correction);
+        this.output.push(...newTokens);
+
+        await sleep(T.acceptPause);
+        this.els.cycle.style.opacity = '0.3';
+        await sleep(T.mergeOut);
+        this.renderOutput(newTokens.length);
+        this.updateStats(idx + 1);
+        await sleep(T.mergeIn);
+        this.els.cycle.style.opacity = '1';
+      }
+
+      showSummary() {
+        const generated = this.output.length - SCENARIO.prefix.length;
+        this.els.cycle.innerHTML = `
+          <div class="summary">
+            <div class="summary-title">Generation complete</div>
+            <div class="summary-detail">
+              <span class="summary-highlight">${this.output.length} tokens</span> produced using only
+              <span class="summary-highlight">${this.passes} target passes</span> (backbone + verification)<br>
+              <span class="summary-dim">No separate draft model needed — just ${SCENARIO.headNames.length - 1} lightweight heads on the shared backbone</span>
+            </div>
+          </div>`;
+      }
+    }
+
+    new MedusaAnimation(document.getElementById('app'));
+  </script>
+</body>
+</html>

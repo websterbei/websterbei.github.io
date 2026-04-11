@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VLM Merge Segments</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { overflow: hidden; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: #fff;
+      color: #1a1a1a;
+      display: flex;
+      justify-content: center;
+      padding: 20px 16px;
+    }
+    .container { max-width: 720px; width: 100%; }
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #999;
+      margin-bottom: 10px;
+    }
+    .panel {
+      background: #fafafa;
+      border: 1px solid #e8e8e8;
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      gap: 12px;
+      align-items: center;
+    }
+    .row + .row {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid #eee;
+    }
+    .row-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #999;
+    }
+    .chips {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 5px 10px;
+      border-radius: 6px;
+      border: 1px solid #d4d4d4;
+      background: #f0f0f0;
+      color: #444;
+      font-size: 12px;
+      font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+      font-weight: 500;
+      transition: all 0.35s ease;
+    }
+    .chip.image {
+      background: #dbeafe;
+      border-color: #93c5fd;
+      color: #1d4ed8;
+      animation: pulse 2.2s ease-in-out infinite;
+    }
+    .seg-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+    }
+    .segment {
+      height: 42px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: #333;
+      border: 1px solid transparent;
+      transition: all 0.45s ease;
+      white-space: nowrap;
+    }
+    .segment.prefix {
+      width: 18%;
+      background: #f0f0f0;
+      border-color: #d4d4d4;
+      color: #444;
+    }
+    .segment.vision {
+      width: 0;
+      opacity: 0;
+      overflow: hidden;
+      background: #f3e8ff;
+      border-color: #c4b5fd;
+      color: #6b21a8;
+    }
+    .segment.suffix {
+      width: 28%;
+      background: #f0f0f0;
+      border-color: #d4d4d4;
+      color: #444;
+    }
+    .segment.show {
+      width: 38%;
+      opacity: 1;
+    }
+    .shape {
+      font-family: "SF Mono", Menlo, monospace;
+      font-size: 11px;
+      color: #777;
+      margin-left: 8px;
+    }
+    .caption {
+      margin-top: 12px;
+      font-size: 13px;
+      color: #666;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .caption strong { color: #333; }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.16); }
+      50% { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.04); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="section-label">Sequence Composition After Merge</div>
+    <div class="panel">
+      <div class="row">
+        <div class="row-label">Before</div>
+        <div class="chips">
+          <span class="chip">Given image</span>
+          <span class="chip image">&lt;|image_token|&gt;</span>
+          <span class="chip">, please describe it .</span>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-label">After</div>
+        <div class="seg-bar">
+          <div class="segment prefix">Prefix Text</div>
+          <div class="segment vision" id="vision-segment">576 Vision Tokens</div>
+          <div class="segment suffix">Suffix Text</div>
+        </div>
+      </div>
+
+      <div class="caption">
+        <strong>[1, 2, D]</strong>
+        <span>+</span>
+        <strong>[1, 576, D]</strong>
+        <span>+</span>
+        <strong>[1, 5, D]</strong>
+        <span class="shape">= [1, 583, D]</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const segment = document.getElementById("vision-segment");
+
+    function loop() {
+      segment.classList.remove("show");
+      setTimeout(() => segment.classList.add("show"), 700);
+    }
+
+    loop();
+    setInterval(loop, 3600);
+  </script>
+</body>
+</html>

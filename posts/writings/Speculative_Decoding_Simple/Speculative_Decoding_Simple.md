@@ -31,7 +31,7 @@ With speculative decoding, we add a cheap "proposer" alongside the main model:
 The key insight is that *checking* multiple tokens costs about the same as *generating* one token (the memory bandwidth bottleneck doesn't change much whether you're processing 1 token or 5). So when the proposer guesses right, you're getting multiple tokens for the price of one.
 
 Here is an animation to illustrate:
-<iframe src="/animations/speculative_decoding.html" width="100%" height="420" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
+<iframe src="/posts/writings/Speculative_Decoding_Simple/animations/speculative_decoding.html" width="100%" height="420" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
 
 ### Why does this speed things up?
 
@@ -124,7 +124,7 @@ Since each head can propose multiple candidates (its top few guesses), Medusa or
 - M small prediction heads (the only new parameters)
 - Tree construction and verification logic
 
-<iframe src="/animations/medusa.html" width="100%" height="500" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
+<iframe src="/posts/writings/Speculative_Decoding_Simple/animations/medusa.html" width="100%" height="500" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
 
 ### Why it's good
 
@@ -168,7 +168,7 @@ At each position, the data flows like this:
 
 Sharing the frozen embedding and output layers is important: it locks the draft model into the target model's vocabulary, so there are never tokenizer mismatch issues.
 
-<iframe src="/animations/eagle_architecture.html" width="100%" height="560" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
+<iframe src="/posts/writings/Speculative_Decoding_Simple/animations/eagle_architecture.html" width="100%" height="560" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
 
 ### How generation works
 
@@ -186,7 +186,7 @@ Because the draft model sees the target model's hidden state directly, it doesn'
 
 EAGLE2 uses the same architecture but adds beam search based on confidence scores, proposing multiple candidate tokens per position for a higher chance of at least one being accepted.
 
-<iframe src="/animations/eagle2_beam.html" width="100%" height="480" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
+<iframe src="/posts/writings/Speculative_Decoding_Simple/animations/eagle2_beam.html" width="100%" height="480" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
 
 Since EAGLE drafting is autoregressive (each predicted token feeds into the next prediction), if an early prediction is wrong, later ones will probably be wrong too. But this doesn't matter — verification stops at the first mismatch anyway.
 
@@ -200,7 +200,7 @@ EAGLE3 is where most of the architectural innovation happens. The goal is to imp
 
 EAGLE1/2 only uses the *last* hidden state from the target model. EAGLE3 pulls hidden states from *multiple* layers — early, middle, and late. The intuition: different layers capture different kinds of information. Early layers have more local/syntactic features, late layers have more global/semantic features. Combining them gives the draft model a richer signal to work with.
 
-<iframe src="/animations/eagle3_architecture.html" width="100%" height="540" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
+<iframe src="/posts/writings/Speculative_Decoding_Simple/animations/eagle3_architecture.html" width="100%" height="540" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
 
 ### Training-time test (TTT)
 
@@ -212,7 +212,7 @@ But during standard training, the model always sees *correct* inputs. This creat
 
 EAGLE3's TTT addresses this by simulating the same conditions during training: when predicting tokens at later positions, the draft model receives its *own previous output* (not the ground truth) as input. This trains the model to be robust to its own mistakes, keeping acceptance rates higher at deeper positions.
 
-<iframe src="/animations/eagle3_ttt.html" width="100%" height="480" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
+<iframe src="/posts/writings/Speculative_Decoding_Simple/animations/eagle3_ttt.html" width="100%" height="480" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
 
 ---
 
@@ -245,7 +245,7 @@ Verification works exactly the same as any other speculative method — the targ
 - A candidate builder that chains lookups
 - The standard target model verifier
 
-<iframe src="/animations/ngram.html" width="100%" height="520" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
+<iframe src="/posts/writings/Speculative_Decoding_Simple/animations/ngram.html" width="100%" height="520" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
 
 ### Why it's good
 

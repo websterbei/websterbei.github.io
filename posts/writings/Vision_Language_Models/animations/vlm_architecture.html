@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VLM Architecture Pipeline</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { overflow: hidden; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: #fff;
+      color: #1a1a1a;
+      display: flex;
+      justify-content: center;
+      padding: 20px 16px;
+    }
+    .container { max-width: 720px; width: 100%; }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #999;
+      margin-bottom: 10px;
+    }
+
+    svg text {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    }
+    .comp-rect { transition: fill 0.4s, stroke 0.4s, stroke-width 0.3s; }
+    .comp-text { transition: fill 0.4s; }
+    .conn { transition: stroke 0.4s; }
+
+    .data-bar {
+      margin-top: 12px;
+      background: #fafafa;
+      border: 1px solid #e8e8e8;
+      border-radius: 8px;
+      padding: 10px 16px;
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      transition: all 0.3s;
+    }
+    .data-bar .step-label { font-weight: 600; color: #333; }
+    .data-bar .step-shape {
+      font-family: "SF Mono", "Fira Code", Menlo, monospace;
+      font-size: 12px;
+      background: #f0f0f0;
+      padding: 2px 8px;
+      border-radius: 4px;
+      color: #555;
+    }
+    .data-bar .step-desc { color: #999; font-size: 12px; font-style: italic; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="section-label">LLaVA-style VLM Pipeline</div>
+    <svg viewBox="0 0 700 175" width="100%">
+      <defs>
+        <marker id="ag" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10z" fill="#d0d0d0"/></marker>
+        <marker id="ab" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10z" fill="#3b82f6"/></marker>
+        <marker id="an" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10z" fill="#22c55e"/></marker>
+        <marker id="ap" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10z" fill="#8b5cf6"/></marker>
+        <marker id="aa" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10z" fill="#f59e0b"/></marker>
+      </defs>
+
+      <!-- Path labels -->
+      <circle cx="8" cy="17" r="3.5" fill="#3b82f6" opacity="0.5"/>
+      <text x="16" y="20" font-size="10" font-weight="700" fill="#aaa" letter-spacing="0.5">VISION</text>
+      <circle cx="8" cy="103" r="3.5" fill="#22c55e" opacity="0.5"/>
+      <text x="16" y="106" font-size="10" font-weight="700" fill="#aaa" letter-spacing="0.5">TEXT</text>
+
+      <!-- ── Vision path (y center ≈ 52) ── -->
+      <g id="c-img">
+        <rect class="comp-rect" x="5" y="31" width="85" height="42" rx="7" fill="#f8f8f8" stroke="#e0e0e0" stroke-width="1.5"/>
+        <text class="comp-text" x="47" y="56" text-anchor="middle" font-size="12.5" font-weight="600" fill="#bbb">Image</text>
+      </g>
+      <line id="a-v1" class="conn" x1="90" y1="52" x2="118" y2="52" stroke="#d0d0d0" stroke-width="1.5" marker-end="url(#ag)"/>
+      <g id="c-ve">
+        <rect class="comp-rect" x="118" y="31" width="137" height="42" rx="7" fill="#f8f8f8" stroke="#e0e0e0" stroke-width="1.5"/>
+        <text class="comp-text" x="186" y="56" text-anchor="middle" font-size="12.5" font-weight="600" fill="#bbb">Vision Encoder</text>
+      </g>
+      <line id="a-v2" class="conn" x1="255" y1="52" x2="283" y2="52" stroke="#d0d0d0" stroke-width="1.5" marker-end="url(#ag)"/>
+      <g id="c-proj">
+        <rect class="comp-rect" x="283" y="31" width="100" height="42" rx="7" fill="#f8f8f8" stroke="#e0e0e0" stroke-width="1.5"/>
+        <text class="comp-text" x="333" y="56" text-anchor="middle" font-size="12.5" font-weight="600" fill="#bbb">Projector</text>
+      </g>
+
+      <!-- Vertical connector -->
+      <line id="a-vt" class="conn" x1="333" y1="73" x2="333" y2="119" stroke="#d0d0d0" stroke-width="1.5" marker-end="url(#ag)"/>
+
+      <!-- ── Text path + merge + decode (y center ≈ 140) ── -->
+      <g id="c-txt">
+        <rect class="comp-rect" x="5" y="119" width="85" height="42" rx="7" fill="#f8f8f8" stroke="#e0e0e0" stroke-width="1.5"/>
+        <text class="comp-text" x="47" y="144" text-anchor="middle" font-size="12.5" font-weight="600" fill="#bbb">Text</text>
+      </g>
+      <line id="a-t1" class="conn" x1="90" y1="140" x2="118" y2="140" stroke="#d0d0d0" stroke-width="1.5" marker-end="url(#ag)"/>
+      <g id="c-te">
+        <rect class="comp-rect" x="118" y="119" width="137" height="42" rx="7" fill="#f8f8f8" stroke="#e0e0e0" stroke-width="1.5"/>
+        <text class="comp-text" x="186" y="144" text-anchor="middle" font-size="12.5" font-weight="600" fill="#bbb">Text Embedding</text>
+      </g>
+      <line id="a-t2" class="conn" x1="255" y1="140" x2="283" y2="140" stroke="#d0d0d0" stroke-width="1.5" marker-end="url(#ag)"/>
+      <g id="c-mrg">
+        <rect class="comp-rect" x="283" y="119" width="100" height="42" rx="7" fill="#f8f8f8" stroke="#e0e0e0" stroke-width="1.5"/>
+        <text class="comp-text" x="333" y="144" text-anchor="middle" font-size="12.5" font-weight="600" fill="#bbb">Merge</text>
+      </g>
+      <line id="a-m1" class="conn" x1="383" y1="140" x2="411" y2="140" stroke="#d0d0d0" stroke-width="1.5" marker-end="url(#ag)"/>
+      <g id="c-llm">
+        <rect class="comp-rect" x="411" y="119" width="137" height="42" rx="7" fill="#f8f8f8" stroke="#e0e0e0" stroke-width="1.5"/>
+        <text class="comp-text" x="479" y="144" text-anchor="middle" font-size="12.5" font-weight="600" fill="#bbb">LLM Decoder</text>
+      </g>
+      <line id="a-m2" class="conn" x1="548" y1="140" x2="576" y2="140" stroke="#d0d0d0" stroke-width="1.5" marker-end="url(#ag)"/>
+      <g id="c-out">
+        <rect class="comp-rect" x="576" y="119" width="90" height="42" rx="7" fill="#f8f8f8" stroke="#e0e0e0" stroke-width="1.5"/>
+        <text class="comp-text" x="621" y="144" text-anchor="middle" font-size="12.5" font-weight="600" fill="#bbb">Output</text>
+      </g>
+    </svg>
+
+    <div class="data-bar" id="dataBar">
+      <span class="step-desc">Visualizing data flow through the VLM pipeline…</span>
+    </div>
+  </div>
+
+  <script>
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    const C = {
+      v: { fill: '#dbeafe', stroke: '#3b82f6', text: '#1d4ed8', mk: 'ab' },
+      t: { fill: '#dcfce7', stroke: '#22c55e', text: '#166534', mk: 'an' },
+      m: { fill: '#f3e8ff', stroke: '#8b5cf6', text: '#6b21a8', mk: 'ap' },
+      o: { fill: '#fef3c7', stroke: '#f59e0b', text: '#92400e', mk: 'aa' },
+      off: { fill: '#f8f8f8', stroke: '#e0e0e0', text: '#bbb' },
+    };
+
+    const STEPS = [
+      { comp: 'c-img',  conns: [],              ct: 'v', label: 'Image Input',         shape: '[H × W × 3]' },
+      { comp: 'c-ve',   conns: ['a-v1'],        ct: 'v', label: 'Vision Features',     shape: '[1, 576, 1024]' },
+      { comp: 'c-proj', conns: ['a-v2'],        ct: 'v', label: 'Vision Embeddings',   shape: '[1, 576, 4096]' },
+      { comp: 'c-txt',  conns: [],              ct: 't', label: 'Text Input',          shape: 'T tokens' },
+      { comp: 'c-te',   conns: ['a-t1'],        ct: 't', label: 'Text Embeddings',     shape: '[1, T, 4096]' },
+      { comp: 'c-mrg',  conns: ['a-t2','a-vt'], ct: 'm', label: 'Merged Embeddings',   shape: '[1, 576+T, 4096]' },
+      { comp: 'c-llm',  conns: ['a-m1'],        ct: 'm', label: 'Decoder Processing',  shape: 'N transformer layers' },
+      { comp: 'c-out',  conns: ['a-m2'],        ct: 'o', label: 'Generated Output',    shape: 'Text response' },
+    ];
+
+    function setComp(id, c, active) {
+      const g = document.getElementById(id);
+      const r = g.querySelector('.comp-rect');
+      r.setAttribute('fill', c.fill);
+      r.setAttribute('stroke', c.stroke);
+      r.setAttribute('stroke-width', active ? '2.5' : '1.5');
+      g.querySelector('.comp-text').setAttribute('fill', c.text);
+    }
+
+    function setConn(id, stroke, mk) {
+      const el = document.getElementById(id);
+      el.setAttribute('stroke', stroke);
+      el.setAttribute('marker-end', `url(#${mk})`);
+    }
+
+    function setBar(label, shape) {
+      document.getElementById('dataBar').innerHTML =
+        `<span class="step-label">${label}</span><span class="step-shape">${shape}</span>`;
+    }
+
+    function reset() {
+      STEPS.forEach(s => {
+        setComp(s.comp, C.off, false);
+        s.conns.forEach(c => setConn(c, '#d0d0d0', 'ag'));
+      });
+      document.getElementById('dataBar').innerHTML =
+        '<span class="step-desc">Visualizing data flow through the VLM pipeline…</span>';
+    }
+
+    async function run() {
+      while (true) {
+        reset();
+        await sleep(1000);
+
+        for (let i = 0; i < STEPS.length; i++) {
+          const step = STEPS[i];
+          const c = C[step.ct];
+
+          if (i > 0) setComp(STEPS[i - 1].comp, C[STEPS[i - 1].ct], false);
+
+          step.conns.forEach(cn => setConn(cn, c.stroke, c.mk));
+          setComp(step.comp, c, true);
+          setBar(step.label, step.shape);
+          await sleep(1300);
+        }
+
+        setComp(STEPS[STEPS.length - 1].comp, C[STEPS[STEPS.length - 1].ct], false);
+        setBar('Pipeline Complete', 'Image + Text → Text Response');
+        await sleep(3500);
+      }
+    }
+
+    run();
+  </script>
+</body>
+</html>

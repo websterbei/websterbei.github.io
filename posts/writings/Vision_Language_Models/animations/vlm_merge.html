@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VLM Embedding Merge</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { overflow: hidden; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: #fff;
+      color: #1a1a1a;
+      display: flex;
+      justify-content: center;
+      padding: 20px 16px;
+    }
+    .container { max-width: 720px; width: 100%; }
+
+    .section-label {
+      font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.8px;
+      color: #999; margin-bottom: 10px;
+    }
+
+    .canvas {
+      background: #fafafa;
+      border: 1px solid #e8e8e8;
+      border-radius: 8px;
+      padding: 18px 16px 14px;
+      min-height: 200px;
+    }
+
+    .step-row {
+      margin-bottom: 14px;
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity 0.4s ease, transform 0.4s ease;
+    }
+    .step-row:last-child { margin-bottom: 0; }
+    .step-row.show { opacity: 1; transform: translateY(0); }
+
+    .row-header {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 6px;
+    }
+    .row-badge {
+      font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.5px;
+      padding: 3px 8px; border-radius: 4px;
+    }
+    .badge-text { background: #f0f0f0; color: #555; }
+    .badge-vis  { background: #f3e8ff; color: #6b21a8; }
+    .badge-merge { background: #dcfce7; color: #166534; }
+    .row-shape {
+      font-family: "SF Mono", "Fira Code", Menlo, monospace;
+      font-size: 11px; color: #aaa;
+    }
+
+    .token-row {
+      display: flex; flex-wrap: wrap;
+      gap: 5px; align-items: center;
+    }
+
+    .token {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 4px 9px; border-radius: 5px;
+      font-size: 12.5px;
+      font-family: "SF Mono", "Fira Code", Menlo, monospace;
+      font-weight: 500; white-space: nowrap;
+      transition: all 0.3s ease;
+    }
+    .token-text  { background: #f0f0f0; border: 1px solid #d4d4d4; color: #444; }
+    .token-img   { background: #dbeafe; border: 1px solid #93c5fd; color: #1d4ed8; }
+    .token-vis   { background: #f3e8ff; border: 1px solid #c4b5fd; color: #7c3aed; }
+
+    .token-img.highlight {
+      box-shadow: 0 0 0 2px #3b82f6;
+      transform: scale(1.08);
+    }
+
+    .ellipsis {
+      color: #bbb; font-size: 13px;
+      padding: 0 2px; font-weight: 600;
+      font-family: "SF Mono", Menlo, monospace;
+    }
+
+    .merge-arrow {
+      display: flex; align-items: center; justify-content: center;
+      padding: 4px 0; color: #ccc; font-size: 14px;
+      opacity: 0; transition: opacity 0.3s;
+    }
+    .merge-arrow.show { opacity: 1; }
+
+    .info-bar {
+      margin-top: 12px;
+      background: #fafafa;
+      border: 1px solid #e8e8e8;
+      border-radius: 8px;
+      padding: 10px 16px;
+      min-height: 38px;
+      font-size: 13px; color: #666;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .info-bar .label { font-weight: 600; color: #333; }
+    .info-bar .shape {
+      font-family: "SF Mono", Menlo, monospace;
+      font-size: 12px; background: #f0f0f0;
+      padding: 2px 8px; border-radius: 4px; color: #555;
+    }
+    .info-bar .desc { color: #999; font-style: italic; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="section-label">Embedding Merge Process</div>
+    <div class="canvas" id="canvas"></div>
+    <div class="info-bar" id="info">
+      <span class="desc">Visualizing how vision and text embeddings merge…</span>
+    </div>
+  </div>
+
+  <script>
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const canvas = document.getElementById('canvas');
+    const info = document.getElementById('info');
+
+    const TEXT_TOKENS = ['Given', 'image', '<|img|>', ',', 'please', 'describe', 'it', '.'];
+
+    function tokSpan(text, cls) {
+      return `<span class="token ${cls}">${text}</span>`;
+    }
+
+    async function run() {
+      while (true) {
+        canvas.innerHTML = `
+          <div class="step-row" id="row-text">
+            <div class="row-header">
+              <span class="row-badge badge-text">Text Embeddings</span>
+              <span class="row-shape">[1, 8, D]</span>
+            </div>
+            <div class="token-row" id="text-tokens">
+              ${TEXT_TOKENS.map(t =>
+                tokSpan(t, t === '<|img|>' ? 'token-img' : 'token-text')
+              ).join('')}
+            </div>
+          </div>
+
+          <div class="step-row" id="row-vis">
+            <div class="row-header">
+              <span class="row-badge badge-vis">Vision Embeddings</span>
+              <span class="row-shape">[1, 576, D]</span>
+            </div>
+            <div class="token-row">
+              ${tokSpan('v\u2081', 'token-vis')}
+              ${tokSpan('v\u2082', 'token-vis')}
+              ${tokSpan('v\u2083', 'token-vis')}
+              ${tokSpan('v\u2084', 'token-vis')}
+              <span class="ellipsis">···</span>
+              ${tokSpan('v\u2085\u2087\u2084', 'token-vis')}
+              ${tokSpan('v\u2085\u2087\u2085', 'token-vis')}
+              ${tokSpan('v\u2085\u2087\u2086', 'token-vis')}
+            </div>
+          </div>
+
+          <div class="merge-arrow" id="merge-arrow">↓ replace &lt;|img|&gt; with vision embeddings ↓</div>
+
+          <div class="step-row" id="row-merged">
+            <div class="row-header">
+              <span class="row-badge badge-merge">Merged</span>
+              <span class="row-shape">[1, 583, D]</span>
+            </div>
+            <div class="token-row">
+              ${tokSpan('Given', 'token-text')}
+              ${tokSpan('image', 'token-text')}
+              ${tokSpan('v\u2081', 'token-vis')}
+              ${tokSpan('v\u2082', 'token-vis')}
+              <span class="ellipsis">···</span>
+              ${tokSpan('v\u2085\u2087\u2086', 'token-vis')}
+              ${tokSpan(',', 'token-text')}
+              ${tokSpan('please', 'token-text')}
+              ${tokSpan('describe', 'token-text')}
+              ${tokSpan('it', 'token-text')}
+              ${tokSpan('.', 'token-text')}
+            </div>
+          </div>`;
+
+        info.innerHTML = '<span class="desc">Visualizing how vision and text embeddings merge…</span>';
+
+        await sleep(600);
+
+        document.getElementById('row-text').classList.add('show');
+        info.innerHTML = '<span class="label">Text Embeddings</span><span class="shape">[1, 8, D]</span>';
+        await sleep(1400);
+
+        const imgToken = document.querySelector('.token-img');
+        imgToken.classList.add('highlight');
+        info.innerHTML = '<span class="label">Image Token</span> placeholder for where vision embeddings will go';
+        await sleep(1400);
+
+        imgToken.classList.remove('highlight');
+        document.getElementById('row-vis').classList.add('show');
+        info.innerHTML = '<span class="label">Vision Embeddings</span><span class="shape">[1, 576, D]</span>';
+        await sleep(1600);
+
+        document.getElementById('merge-arrow').classList.add('show');
+        await sleep(800);
+
+        document.getElementById('row-merged').classList.add('show');
+        info.innerHTML = '<span class="label">Merged Result</span><span class="shape">[1, 583, D]</span> — 8 − 1 + 576 = 583 tokens';
+        await sleep(4000);
+      }
+    }
+
+    run();
+  </script>
+</body>
+</html>

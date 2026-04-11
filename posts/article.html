@@ -125,13 +125,52 @@
             return 'Article';
         }
 
+        function getArticleCandidates(articleParam) {
+            const clean = articleParam.replace(/^\/+|\/+$/g, '').replace(/^writings\//, '');
+            const hasExtension = clean.endsWith('.md');
+            const withoutExt = hasExtension ? clean.slice(0, -3) : clean;
+            const parts = withoutExt.split('/').filter(Boolean);
+            const base = parts[parts.length - 1];
+
+            if (!base) {
+                return [];
+            }
+
+            const candidates = [];
+
+            if (parts.length === 1) {
+                candidates.push(`${base}/${base}.md`);
+                candidates.push(`${base}.md`);
+            } else if (hasExtension) {
+                candidates.push(clean);
+            } else if (parts.length > 1 && parts[parts.length - 2] === base) {
+                candidates.push(`${withoutExt}.md`);
+            } else {
+                candidates.push(`${withoutExt}/${base}.md`);
+                candidates.push(`${withoutExt}.md`);
+            }
+
+            return [...new Set(candidates)];
+        }
+
         // Function to load and render Markdown file
-        async function loadMarkdown(filename, fallbackTitle = 'Article') {
+        async function loadMarkdown(candidates, fallbackTitle = 'Article') {
             try {
-                const response = await fetch(`writings/${filename}`);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                const candidateList = Array.isArray(candidates) ? candidates : [candidates];
+                let response = null;
+
+                for (const filename of candidateList) {
+                    const attempt = await fetch(`writings/${filename}`);
+                    if (attempt.ok) {
+                        response = attempt;
+                        break;
+                    }
                 }
+
+                if (!response) {
+                    throw new Error(`Article not found. Tried: ${candidateList.join(', ')}`);
+                }
+
                 const text = await response.text();
                 
                 // Extract title from markdown content
@@ -203,9 +242,7 @@
             const articleParam = getUrlParameter('article');
             
             if (articleParam) {
-                // Try to load article directly by filename
-                const filename = articleParam.endsWith('.md') ? articleParam : `${articleParam}.md`;
-                loadMarkdown(filename);
+                loadMarkdown(getArticleCandidates(articleParam));
             } else {
                 // No article specified, show error
                 document.getElementById('content').innerHTML = `

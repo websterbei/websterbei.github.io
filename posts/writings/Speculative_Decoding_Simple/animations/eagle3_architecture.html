@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EAGLE3 Architecture</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { overflow: hidden; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: #fff;
+      display: flex;
+      justify-content: center;
+      padding: 20px 16px;
+    }
+
+    .diagram {
+      max-width: 560px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .box {
+      padding: 9px 16px;
+      border-radius: 7px;
+      text-align: center;
+      position: relative;
+    }
+
+    .frozen   { background: #f9fafb; border: 1.5px dashed #c4c4c4; }
+    .trainable { background: #eff6ff; border: 1.5px solid #60a5fa; }
+    .new-box  { background: #faf5ff; border: 1.5px solid #c084fc; }
+
+    .box-title { font-size: 12px; font-weight: 700; color: #1a1a1a; margin-bottom: 1px; }
+    .box-sub   { font-size: 10px; color: #888; }
+
+    .tag {
+      position: absolute; top: -8px; right: -8px;
+      font-size: 8px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.4px; padding: 2px 5px; border-radius: 3px;
+    }
+    .tag-frozen { background: #f3f4f6; color: #6b7280; border: 1px solid #d1d5db; }
+    .tag-train  { background: #dbeafe; color: #2563eb; border: 1px solid #93c5fd; }
+    .tag-new    { background: #f3e8ff; color: #9333ea; border: 1px solid #d8b4fe; }
+
+    .input-row {
+      display: flex; gap: 24px; justify-content: center;
+      width: 100%; margin-bottom: 0;
+    }
+    .input-col {
+      display: flex; flex-direction: column;
+      align-items: center; flex: 1; max-width: 230px;
+    }
+
+    .vline {
+      width: 1.5px; background: #bbb;
+    }
+
+    .data-label {
+      font-size: 11px; font-weight: 600; color: #6366f1;
+      font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+      padding: 1px 0;
+    }
+
+    .merge-area {
+      display: flex; flex-direction: column;
+      align-items: center; width: 100%; position: relative;
+    }
+    .merge-lines {
+      display: flex; width: 100%; max-width: 480px;
+      justify-content: center; height: 24px;
+    }
+    .merge-lines svg { width: 100%; height: 100%; }
+
+    .merge-label {
+      font-size: 10px; font-weight: 600; color: #6366f1;
+      font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+    }
+
+    .center-col {
+      display: flex; flex-direction: column;
+      align-items: center;
+    }
+
+    .output-box {
+      padding: 7px 18px; border-radius: 7px;
+      background: #f0fdf4; border: 1.5px solid #86efac;
+      font-size: 12px; font-weight: 700; color: #166534;
+    }
+
+    .arrow-down {
+      width: 0; height: 0;
+      border-left: 4px solid transparent;
+      border-right: 4px solid transparent;
+      border-top: 5px solid #bbb;
+    }
+
+    /* Multi-layer feature section */
+    .feature-group {
+      display: flex; gap: 6px; align-items: center;
+    }
+
+    .feature-chip {
+      padding: 5px 8px; border-radius: 5px;
+      font-size: 10px; font-weight: 600;
+      background: #faf5ff; border: 1px solid #d8b4fe;
+      color: #7e22ce; text-align: center;
+    }
+    .feature-chip .sub { font-size: 9px; color: #a855f7; font-weight: 400; }
+
+    .legend {
+      display: flex; gap: 14px; margin-top: 14px;
+    }
+    .legend-item { display: flex; align-items: center; gap: 5px; font-size: 10px; color: #888; }
+    .legend-swatch { width: 16px; height: 12px; border-radius: 3px; }
+    .sw-frozen   { background: #f9fafb; border: 1.5px dashed #c4c4c4; }
+    .sw-train    { background: #eff6ff; border: 1.5px solid #60a5fa; }
+    .sw-new      { background: #faf5ff; border: 1.5px solid #c084fc; }
+  </style>
+</head>
+<body>
+  <div class="diagram" id="diagram">
+    <div class="input-row">
+      <div class="input-col">
+        <div class="box frozen" id="b-embed">
+          <span class="tag tag-frozen">Frozen</span>
+          <div class="box-title">Embedding Table</div>
+          <div class="box-sub">from target model</div>
+        </div>
+        <div class="vline" id="v1a" style="height:16px"></div>
+        <div class="data-label" id="l-et">e_t</div>
+      </div>
+      <div class="input-col">
+        <div class="feature-group" id="fg">
+          <div class="feature-chip">h_t<sup>(early)</sup><div class="sub">layer 2</div></div>
+          <div class="feature-chip">h_t<sup>(mid)</sup><div class="sub">layer L/2</div></div>
+          <div class="feature-chip">h_t<sup>(late)</sup><div class="sub">layer L−3</div></div>
+        </div>
+        <div class="vline" id="v-fc1" style="height:6px"></div>
+        <div class="box new-box" id="b-fc">
+          <span class="tag tag-new">New</span>
+          <div class="box-title">Feature Fusion W<sub>fc</sub></div>
+          <div class="box-sub">concat → project</div>
+        </div>
+        <div class="vline" id="v-fc2" style="height:6px"></div>
+        <div class="data-label" id="l-ht">h̃_t</div>
+      </div>
+    </div>
+
+    <div class="merge-area">
+      <div class="merge-lines" id="merge-lines">
+        <svg viewBox="0 0 480 24" preserveAspectRatio="none">
+          <line x1="120" y1="0" x2="240" y2="20" stroke="#bbb" stroke-width="1.5" />
+          <line x1="360" y1="0" x2="240" y2="20" stroke="#bbb" stroke-width="1.5" />
+        </svg>
+      </div>
+      <div class="merge-label" id="l-concat">concat [e_t ; h̃_t]</div>
+      <div class="arrow-down" id="a-merge"></div>
+    </div>
+
+    <div class="center-col">
+      <div class="vline" id="v2" style="height:6px"></div>
+      <div class="box trainable" id="b-proj">
+        <span class="tag tag-train">Trainable</span>
+        <div class="box-title">Fusion Projection W<sub>f</sub></div>
+        <div class="box-sub">ℝ<sup>2d</sup> → ℝ<sup>d</sup></div>
+      </div>
+      <div class="vline" id="v3" style="height:6px"></div>
+      <div class="data-label" id="l-zt">z_t</div>
+      <div class="arrow-down" id="a-dec"></div>
+      <div class="vline" id="v4" style="height:6px"></div>
+
+      <div class="box trainable" id="b-dec">
+        <span class="tag tag-train">Trainable</span>
+        <div class="box-title">Decoder Layers + TTT</div>
+        <div class="box-sub">Self-Attention + MLP · trained with self-feeding</div>
+      </div>
+      <div class="vline" id="v5" style="height:6px"></div>
+      <div class="arrow-down" id="a-lm"></div>
+      <div class="vline" id="v6" style="height:6px"></div>
+
+      <div class="box frozen" id="b-lm">
+        <span class="tag tag-frozen">Frozen</span>
+        <div class="box-title">LM Head</div>
+        <div class="box-sub">from target model</div>
+      </div>
+      <div class="vline" id="v7" style="height:6px"></div>
+      <div class="arrow-down" id="a-out"></div>
+      <div class="vline" id="v8" style="height:6px"></div>
+
+      <div class="output-box" id="b-out">Predicted Token</div>
+    </div>
+
+    <div class="legend" id="legend">
+      <div class="legend-item"><div class="legend-swatch sw-frozen"></div>Frozen (target)</div>
+      <div class="legend-item"><div class="legend-swatch sw-train"></div>Trainable</div>
+      <div class="legend-item"><div class="legend-swatch sw-new"></div>New in EAGLE3</div>
+    </div>
+  </div>
+
+</body>
+</html>

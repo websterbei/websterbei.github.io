@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LLaMA Vision Cross-Attention</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { overflow: hidden; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: #fff;
+      color: #1a1a1a;
+      display: flex;
+      justify-content: center;
+      padding: 16px 16px 10px;
+    }
+    .container { max-width: 720px; width: 100%; }
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #999;
+      margin-bottom: 8px;
+    }
+    .panel {
+      background: #fafafa;
+      border: 1px solid #e8e8e8;
+      border-radius: 8px;
+      padding: 14px;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .vision-row {
+      padding-bottom: 10px;
+      border-bottom: 1px solid #eee;
+      margin-bottom: 10px;
+    }
+    .row-label {
+      width: 96px;
+      flex-shrink: 0;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #999;
+    }
+    .card {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 38px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid #d9d9d9;
+      background: #fff;
+      color: #555;
+      font-size: 12px;
+      font-weight: 600;
+      text-align: center;
+      transition: all 0.28s ease;
+    }
+    .card.vision { min-width: 90px; }
+    .card.text { min-width: 90px; }
+    .card.cross { min-width: 130px; }
+    .card.output { min-width: 92px; }
+    .arrow {
+      color: #c9c9c9;
+      font-size: 16px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .backbone {
+      display: grid;
+      grid-template-columns: 96px 1fr;
+      gap: 8px 12px;
+      align-items: start;
+    }
+    .backbone-rows {
+      display: grid;
+      gap: 10px;
+    }
+    .cross-grid {
+      display: grid;
+      grid-template-columns: 98px 1fr;
+      gap: 8px 12px;
+      align-items: start;
+    }
+    .rail {
+      position: relative;
+      min-height: 126px;
+      padding-top: 2px;
+    }
+    .rail-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #8b5cf6;
+      margin-bottom: 6px;
+    }
+    .rail-line {
+      position: absolute;
+      left: 13px;
+      top: 24px;
+      bottom: 8px;
+      width: 2px;
+      background: #e9ddff;
+      border-radius: 999px;
+    }
+    .rail-dot {
+      position: absolute;
+      left: 7px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #f3e8ff;
+      border: 2px solid #d8b4fe;
+      transition: all 0.28s ease;
+    }
+    .rail-dot.one { top: 34px; }
+    .rail-dot.two { top: 72px; }
+    .rail-dot.three { top: 110px; }
+    .rows { display: grid; gap: 8px; }
+    .info-bar {
+      margin-top: 10px;
+      background: #fafafa;
+      border: 1px solid #e8e8e8;
+      border-radius: 8px;
+      padding: 9px 14px;
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+    .info-label { font-weight: 600; color: #333; }
+    .info-desc { color: #999; font-style: italic; }
+    .active-blue {
+      background: #dbeafe;
+      border-color: #93c5fd;
+      color: #1d4ed8;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.08);
+    }
+    .active-green {
+      background: #dcfce7;
+      border-color: #86efac;
+      color: #166534;
+      box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.08);
+    }
+    .active-purple {
+      background: #f3e8ff;
+      border-color: #c4b5fd;
+      color: #6b21a8;
+      box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.08);
+    }
+    .active-amber {
+      background: #fef3c7;
+      border-color: #fcd34d;
+      color: #92400e;
+      box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.08);
+    }
+    .dot-active {
+      background: #f3e8ff;
+      border-color: #8b5cf6;
+      transform: scale(1.1);
+      box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.12);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="section-label">LLaMA Vision Style</div>
+    <div class="panel">
+      <div class="row vision-row">
+        <div class="row-label">Vision Path</div>
+        <div class="card vision" id="v-image">Image</div>
+        <div class="arrow">&rarr;</div>
+        <div class="card vision" id="v-encoder">Vision Encoder</div>
+        <div class="arrow">&rarr;</div>
+        <div class="card vision" id="v-projector">Projector</div>
+        <div class="arrow">&rarr;</div>
+        <div class="card cross" id="v-state">Cross-Attention State</div>
+      </div>
+
+      <div class="backbone">
+        <div class="row-label">Text Path</div>
+        <div class="row">
+          <div class="card text" id="t-input">Text Input</div>
+          <div class="arrow">&rarr;</div>
+          <div class="card text" id="t-embed">Text Embedding</div>
+        </div>
+
+        <div class="row-label">Injection</div>
+        <div class="cross-grid">
+          <div class="rail">
+            <div class="rail-label">State</div>
+            <div class="rail-line"></div>
+            <div class="rail-dot one" id="dot-1"></div>
+            <div class="rail-dot two" id="dot-2"></div>
+            <div class="rail-dot three" id="dot-3"></div>
+          </div>
+
+          <div class="rows">
+            <div class="row">
+              <div class="card text" id="d1">Decoder Layer 1</div>
+              <div class="arrow">&rarr;</div>
+              <div class="card cross" id="ca1">Cross-Attention Layer 1</div>
+            </div>
+            <div class="row">
+              <div class="card text" id="d2">Decoder Layer 2</div>
+              <div class="arrow">&rarr;</div>
+              <div class="card cross" id="ca2">Cross-Attention Layer 2</div>
+            </div>
+            <div class="row">
+              <div class="card text" id="dn">Decoder Layer N</div>
+              <div class="arrow">&rarr;</div>
+              <div class="card cross" id="cam">Cross-Attention Layer M</div>
+              <div class="arrow">&rarr;</div>
+              <div class="card output" id="out">Text Output</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-bar" id="info">
+      <span class="info-desc">Vision features are injected through cross-attention instead of being merged into the input sequence.</span>
+    </div>
+  </div>
+
+  <script>
+    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+    const steps = [
+      { ids: ["v-image"], cls: "active-blue", label: "Image Input", desc: "Start from the image on the vision side." },
+      { ids: ["v-encoder"], cls: "active-blue", label: "Vision Encoder", desc: "Encode pixels into visual features." },
+      { ids: ["v-projector"], cls: "active-blue", label: "Projector", desc: "Map vision features into a form the language model can use." },
+      { ids: ["v-state"], cls: "active-purple", label: "Cross-Attention State", desc: "Keep visual information separate from the text token stream." },
+      { ids: ["t-input", "t-embed"], cls: "active-green", label: "Text Backbone", desc: "Text still enters through the normal embedding path." },
+      { ids: ["d1", "ca1", "dot-1"], cls: "active-purple", label: "Cross-Attention Layer 1", desc: "Inject vision information at selected layers." },
+      { ids: ["d2", "ca2", "dot-2"], cls: "active-purple", label: "Cross-Attention Layer 2", desc: "The same visual state can be reused deeper in the stack." },
+      { ids: ["dn", "cam", "dot-3", "out"], cls: "active-amber", label: "Output Generation", desc: "The backbone produces text after repeated vision-aware decoding." }
+    ];
+
+    function clearAll() {
+      document.querySelectorAll(".card").forEach(el => {
+        el.classList.remove("active-blue", "active-green", "active-purple", "active-amber");
+      });
+      document.querySelectorAll(".rail-dot").forEach(el => {
+        el.classList.remove("dot-active");
+      });
+    }
+
+    function activate(step) {
+      step.ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (el.classList.contains("rail-dot")) {
+          el.classList.add("dot-active");
+        } else {
+          el.classList.add(step.cls);
+        }
+      });
+      document.getElementById("info").innerHTML =
+        `<span class="info-label">${step.label}</span><span>${step.desc}</span>`;
+    }
+
+    async function run() {
+      while (true) {
+        clearAll();
+        document.getElementById("info").innerHTML =
+          '<span class="info-desc">Vision features are injected through cross-attention instead of being merged into the input sequence.</span>';
+        await sleep(900);
+
+        for (const step of steps) {
+          clearAll();
+          activate(step);
+          await sleep(1400);
+        }
+
+        clearAll();
+        document.getElementById("info").innerHTML =
+          '<span class="info-label">Key Difference</span><span>LLaMA Vision keeps visual features off the main token sequence and injects them only where cross-attention layers exist.</span>';
+        await sleep(3200);
+      }
+    }
+
+    run();
+  </script>
+</body>
+</html>

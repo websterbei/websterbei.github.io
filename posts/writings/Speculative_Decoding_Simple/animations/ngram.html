@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>N-gram Speculation</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { overflow: hidden; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: #fff; color: #1a1a1a;
+      display: flex; justify-content: center;
+      padding: 20px 16px;
+    }
+
+    .container { max-width: 720px; width: 100%; }
+
+    .header { margin-bottom: 14px; }
+    .phase-bar { display: flex; align-items: center; gap: 6px; }
+    .phase-step {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 13px; font-weight: 600; color: #c0c0c0;
+      transition: color 0.3s;
+    }
+    .phase-step.active { color: #1a1a1a; }
+    .phase-dot {
+      width: 9px; height: 9px; border-radius: 50%;
+      background: #e0e0e0;
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+    .phase-step.active .phase-dot { box-shadow: 0 0 0 3px rgba(0,0,0,0.06); }
+    .phase-arrow { color: #d0d0d0; font-size: 13px; margin: 0 2px; }
+
+    .section-label {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.8px; color: #999; margin-bottom: 6px;
+    }
+
+    /* ── Context text ── */
+    .context-area {
+      background: #fafafa; border: 1px solid #e8e8e8; border-radius: 8px;
+      padding: 14px 16px; margin-bottom: 14px;
+      font-size: 14px; line-height: 1.7;
+      font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+    }
+
+    .ctx-token {
+      display: inline;
+      padding: 2px 0;
+      border-radius: 3px;
+      transition: background 0.25s, color 0.25s;
+    }
+    .ctx-token.highlight {
+      background: #dbeafe;
+      color: #1e40af;
+      padding: 2px 1px;
+    }
+    .ctx-token.match-source {
+      background: #fef3c7;
+      color: #92400e;
+      padding: 2px 1px;
+    }
+    .ctx-token.match-cont {
+      background: #dcfce7;
+      color: #166534;
+      padding: 2px 1px;
+    }
+
+    /* ── N-gram cache ── */
+    .cache-area {
+      background: #fafafa; border: 1px solid #e8e8e8; border-radius: 8px;
+      padding: 16px; margin-bottom: 14px; min-height: 100px;
+    }
+
+    .cache-table { width: 100%; border-collapse: collapse; }
+    .cache-table th {
+      text-align: left; font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.5px;
+      color: #999; padding: 4px 8px; border-bottom: 1px solid #e5e7eb;
+    }
+    .cache-table td {
+      padding: 5px 8px; font-size: 13px; border-bottom: 1px solid #f3f4f6;
+      font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+    }
+
+    .cache-row {
+      opacity: 0; transform: translateX(-8px);
+      transition: all 0.3s ease;
+    }
+    .cache-row.show { opacity: 1; transform: translateX(0); }
+    .cache-row.highlight td { background: #fffbeb; }
+
+    .suffix-cell { color: #1e40af; font-weight: 600; }
+    .cont-cell   { color: #166534; font-weight: 600; }
+    .count-cell  { color: #888; font-weight: 500; text-align: center; }
+
+    /* ── Proposal area ── */
+    .proposal-area {
+      background: #fafafa; border: 1px solid #e8e8e8; border-radius: 8px;
+      padding: 16px; margin-bottom: 14px; min-height: 60px;
+      transition: opacity 0.3s;
+    }
+    .proposal-msg {
+      text-align: center; padding: 10px 0; color: #aaa; font-size: 13px;
+    }
+    .proposal-content {
+      display: flex; align-items: center; gap: 8px;
+      flex-wrap: wrap;
+    }
+    .proposal-label {
+      font-size: 11px; font-weight: 700; color: #999;
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+
+    .token {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 4px 10px; border-radius: 5px; font-size: 13px;
+      font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+      font-weight: 600; white-space: nowrap;
+      opacity: 0; transform: translateY(5px);
+      transition: all 0.3s ease;
+    }
+    .token.show { opacity: 1; transform: translateY(0); }
+    .token-suffix   { background: #dbeafe; border: 1px solid #93c5fd; color: #1e40af; }
+    .token-proposal { background: #dcfce7; border: 1px solid #86efac; color: #166534; }
+    .token-accepted { background: #dcfce7; border: 1px solid #86efac; color: #166534; }
+    .token-rejected { background: #fee2e2; border: 1px solid #fca5a5; color: #991b1b; text-decoration: line-through; }
+    .token-correction { background: #fef3c7; border: 1px solid #fcd34d; color: #92400e; }
+
+    .verdict {
+      width: 20px; height: 20px; display: inline-flex;
+      align-items: center; justify-content: center;
+      border-radius: 50%; font-size: 11px; font-weight: 700;
+      opacity: 0; transform: scale(0.4);
+      transition: all 0.25s ease;
+    }
+    .verdict.show { opacity: 1; transform: scale(1); }
+    .verdict-pass { background: #dcfce7; color: #16a34a; }
+    .verdict-fail { background: #fee2e2; color: #dc2626; }
+
+    .summary {
+      text-align: center; padding: 16px 0;
+    }
+    .summary-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+    .summary-detail { font-size: 12px; color: #666; line-height: 1.5; }
+    .summary-highlight { color: #16a34a; font-weight: 600; }
+    .summary-dim { color: #999; }
+  </style>
+</head>
+<body>
+  <div class="container" id="app"></div>
+
+  <script>
+    const CONTEXT_WORDS = [
+      'def', ' ', 'process', '(', 'data', ',', ' ', 'config', ')', ':', '\n',
+      '    ', 'result', ' ', '=', ' ', 'validate', '(', 'data', ',', ' ', 'config', ')', '\n',
+      '    ', 'return', ' ', 'transform', '(', 'result', ',', ' ', 'config', ')', '\n', '\n',
+      'def', ' ', 'analyze', '(', 'data', ',', ' ', 'config', ')', ':', '\n',
+      '    ', 'result', ' ', '=', ' ', 'validate', '(', 'data', ',', ' ', 'config', ')', '\n',
+      '    ', 'return', ' ',
+    ];
+
+    const SUFFIX = ['(', 'result', ',', ' '];
+    const PROPOSED = ['config', ')'];
+    const ACCEPTED = [true, true];
+    const CORRECTION = null;
+
+    const NGRAM_ENTRIES = [
+      { suffix: ['data', ','], continuation: 'config', count: 2 },
+      { suffix: [',', ' '], continuation: 'config', count: 4 },
+      { suffix: ['result', ','], continuation: 'config', count: 1 },
+      { suffix: ['(', 'result'], continuation: ',', count: 2 },
+      { suffix: ['result', ',', ' '], continuation: 'config', count: 1 },
+      { suffix: [',', ' ', 'config'], continuation: ')', count: 2 },
+    ];
+
+    const MATCH_IDX = [4, 5];
+
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    class NgramAnimation {
+      constructor(root) {
+        this.root = root;
+        this.build();
+        this.play();
+      }
+
+      build() {
+        this.root.innerHTML = `
+          <div class="header">
+            <div class="phase-bar">
+              <div class="phase-step" data-phase="scan"><div class="phase-dot"></div><span>Scan context</span></div>
+              <span class="phase-arrow">→</span>
+              <div class="phase-step" data-phase="build"><div class="phase-dot"></div><span>Build cache</span></div>
+              <span class="phase-arrow">→</span>
+              <div class="phase-step" data-phase="match"><div class="phase-dot"></div><span>Match suffix</span></div>
+              <span class="phase-arrow">→</span>
+              <div class="phase-step" data-phase="verify"><div class="phase-dot"></div><span>Verify</span></div>
+            </div>
+          </div>
+
+          <div class="section-label">Context (previously generated)</div>
+          <div class="context-area" id="contextArea"></div>
+
+          <div class="section-label">N-gram cache</div>
+          <div class="cache-area" id="cacheArea">
+            <div class="proposal-msg">Scanning context…</div>
+          </div>
+
+          <div class="section-label">Proposal</div>
+          <div class="proposal-area" id="proposalArea">
+            <div class="proposal-msg">Waiting…</div>
+          </div>`;
+
+        this.els = {
+          context:  this.root.querySelector('#contextArea'),
+          cache:    this.root.querySelector('#cacheArea'),
+          proposal: this.root.querySelector('#proposalArea'),
+          phases:   this.root.querySelectorAll('.phase-step'),
+        };
+      }
+
+      setPhase(name) {
+        const colors = { scan: '#3b82f6', build: '#f59e0b', match: '#8b5cf6', verify: '#22c55e' };
+        this.els.phases.forEach(el => {
+          const p = el.dataset.phase;
+          const active = p === name;
+          el.classList.toggle('active', active);
+          el.querySelector('.phase-dot').style.background = active ? colors[p] : '#e0e0e0';
+        });
+      }
+      clearPhase() {
+        this.els.phases.forEach(el => {
+          el.classList.remove('active');
+          el.querySelector('.phase-dot').style.background = '#e0e0e0';
+        });
+      }
+
+      renderContext(highlightRanges) {
+        const hl = highlightRanges || {};
+        this.els.context.innerHTML = CONTEXT_WORDS.map((w, i) => {
+          let cls = 'ctx-token';
+          if (hl.source && i >= hl.source[0] && i <= hl.source[1]) cls += ' match-source';
+          else if (hl.cont && i >= hl.cont[0] && i <= hl.cont[1]) cls += ' match-cont';
+          else if (hl.suffix && i >= hl.suffix[0] && i <= hl.suffix[1]) cls += ' highlight';
+          const display = w === '\n' ? '<br>' : w.replace(/ /g, '&nbsp;');
+          return `<span class="${cls}" id="cw-${i}">${display}</span>`;
+        }).join('');
+      }
+
+      async play() {
+        this.build();
+        await sleep(600);
+
+        /* ── SCAN ── */
+        this.setPhase('scan');
+        this.renderContext({ suffix: [CONTEXT_WORDS.length - 4, CONTEXT_WORDS.length - 1] });
+        await sleep(1200);
+
+        /* ── BUILD CACHE ── */
+        this.setPhase('build');
+
+        let tableHTML = `<table class="cache-table">
+          <thead><tr><th>Suffix (n-gram)</th><th>Continuation</th><th>Count</th></tr></thead><tbody>`;
+        NGRAM_ENTRIES.forEach((e, i) => {
+          tableHTML += `<tr class="cache-row" id="cr-${i}">
+            <td class="suffix-cell">${e.suffix.join(' ')}</td>
+            <td class="cont-cell">${e.continuation}</td>
+            <td class="count-cell">${e.count}</td>
+          </tr>`;
+        });
+        tableHTML += '</tbody></table>';
+        this.els.cache.innerHTML = tableHTML;
+
+        for (let i = 0; i < NGRAM_ENTRIES.length; i++) {
+          document.getElementById(`cr-${i}`).classList.add('show');
+          await sleep(250);
+        }
+        await sleep(600);
+
+        /* ── MATCH ── */
+        this.setPhase('match');
+
+        const suffixStart = CONTEXT_WORDS.length - SUFFIX.length;
+        this.renderContext({ suffix: [suffixStart, CONTEXT_WORDS.length - 1] });
+
+        await sleep(500);
+
+        for (const idx of MATCH_IDX) {
+          document.getElementById(`cr-${idx}`).classList.add('highlight');
+          await sleep(400);
+        }
+        await sleep(400);
+
+        let propHTML = `<div class="proposal-content">
+          <span class="proposal-label">Suffix:</span>`;
+        SUFFIX.forEach((t, i) => {
+          const display = t === ' ' ? '␣' : t;
+          propHTML += `<span class="token token-suffix" id="ps-${i}">${display}</span>`;
+        });
+        propHTML += `<span style="color:#ccc;font-size:16px;margin:0 4px">→</span>
+          <span class="proposal-label">Propose:</span>`;
+        PROPOSED.forEach((t, i) => {
+          propHTML += `<span class="token token-proposal" id="pp-${i}">${t}</span>`;
+        });
+        propHTML += '</div>';
+        this.els.proposal.innerHTML = propHTML;
+
+        for (let i = 0; i < SUFFIX.length; i++) {
+          document.getElementById(`ps-${i}`).classList.add('show');
+          await sleep(100);
+        }
+        await sleep(200);
+        for (let i = 0; i < PROPOSED.length; i++) {
+          document.getElementById(`pp-${i}`).classList.add('show');
+          await sleep(200);
+        }
+        await sleep(800);
+
+        /* ── VERIFY ── */
+        this.setPhase('verify');
+
+        let verifyHTML = `<div class="proposal-content">
+          <span class="proposal-label">Verify:</span>`;
+        PROPOSED.forEach((t, i) => {
+          const pass = ACCEPTED[i];
+          verifyHTML += `<span class="token ${pass ? 'token-accepted' : 'token-rejected'} show">${t}</span>`;
+          verifyHTML += `<span class="verdict ${pass ? 'verdict-pass' : 'verdict-fail'}" id="vv-${i}">${pass ? '✓' : '✗'}</span>`;
+        });
+        if (CORRECTION) {
+          verifyHTML += `<span style="color:#ccc;margin:0 2px">→</span>
+            <span class="token token-correction show">${CORRECTION}</span>`;
+        }
+        verifyHTML += '</div>';
+        this.els.proposal.innerHTML = verifyHTML;
+
+        for (let i = 0; i < PROPOSED.length; i++) {
+          document.getElementById(`vv-${i}`).classList.add('show');
+          await sleep(350);
+        }
+        await sleep(600);
+
+        /* ── SUMMARY ── */
+        this.clearPhase();
+        this.els.proposal.innerHTML = `
+          <div class="summary">
+            <div class="summary-title">N-gram match found</div>
+            <div class="summary-detail">
+              Suffix <span class="summary-highlight">${SUFFIX.map(t => t === ' ' ? '␣' : t).join(' ')}</span>
+              matched in cache → proposed <span class="summary-highlight">${PROPOSED.join(' ')}</span><br>
+              <span class="summary-dim">Cost: a hash lookup (nanoseconds) — no GPU, no model weights</span>
+            </div>
+          </div>`;
+
+        await sleep(4000);
+        this.play();
+      }
+    }
+
+    new NgramAnimation(document.getElementById('app'));
+  </script>
+</body>
+</html>

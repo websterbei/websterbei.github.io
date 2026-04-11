@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VLM Projector</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { overflow: hidden; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: #fff;
+      color: #1a1a1a;
+      display: flex;
+      justify-content: center;
+      padding: 20px 16px;
+    }
+    .container { max-width: 720px; width: 100%; }
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #999;
+      margin-bottom: 10px;
+    }
+    .panel {
+      background: #fafafa;
+      border: 1px solid #e8e8e8;
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .pipeline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .node {
+      min-width: 102px;
+      min-height: 44px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid #d9d9d9;
+      background: #fff;
+      color: #555;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 0.28s ease;
+    }
+    .node.small { min-width: 92px; }
+    .arrow {
+      color: #c9c9c9;
+      font-size: 16px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .token-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+      align-items: center;
+    }
+    .token {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px 9px;
+      border-radius: 5px;
+      border: 1px solid #d4d4d4;
+      background: #f0f0f0;
+      color: #555;
+      font-size: 12px;
+      font-family: "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+      transition: all 0.28s ease;
+    }
+    .token.out {
+      background: #f3e8ff;
+      border-color: #c4b5fd;
+      color: #7c3aed;
+    }
+    .token.morph {
+      background: #dbeafe;
+      border-color: #93c5fd;
+      color: #1d4ed8;
+    }
+    .node-blue {
+      background: #dbeafe;
+      border-color: #93c5fd;
+      color: #1d4ed8;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.08);
+    }
+    .node-green {
+      background: #dcfce7;
+      border-color: #86efac;
+      color: #166534;
+      box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.08);
+    }
+    .node-purple {
+      background: #f3e8ff;
+      border-color: #c4b5fd;
+      color: #6b21a8;
+      box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.08);
+    }
+    .info-bar {
+      margin-top: 12px;
+      background: #fafafa;
+      border: 1px solid #e8e8e8;
+      border-radius: 8px;
+      padding: 10px 16px;
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+    }
+    .shape {
+      font-family: "SF Mono", Menlo, monospace;
+      font-size: 12px;
+      background: #f0f0f0;
+      color: #555;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .muted { color: #999; font-style: italic; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="section-label">Common Projector Design</div>
+    <div class="panel">
+      <div class="pipeline">
+        <div class="node" id="in">Visual Feature</div>
+        <div class="arrow">&rarr;</div>
+        <div class="node small" id="l1">Linear 1</div>
+        <div class="arrow">&rarr;</div>
+        <div class="node small" id="gelu">GeLU</div>
+        <div class="arrow">&rarr;</div>
+        <div class="node small" id="l2">Linear 2</div>
+        <div class="arrow">&rarr;</div>
+        <div class="node" id="out">Vision Embedding</div>
+      </div>
+
+      <div class="token-row" id="tokens">
+        <span class="token" id="t1">f1</span>
+        <span class="token" id="t2">f2</span>
+        <span class="token" id="t3">f3</span>
+        <span class="token" id="t4">f4</span>
+        <span class="token" id="t5">...</span>
+      </div>
+    </div>
+
+    <div class="info-bar" id="info">
+      <span class="muted">Project the vision encoder output into the LLM embedding space.</span>
+    </div>
+  </div>
+
+  <script>
+    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const nodes = ["in", "l1", "gelu", "l2", "out"];
+    const tokens = ["t1", "t2", "t3", "t4", "t5"];
+
+    function clearAll() {
+      nodes.forEach(id => {
+        document.getElementById(id).classList.remove("node-blue", "node-green", "node-purple");
+      });
+      tokens.forEach(id => {
+        document.getElementById(id).classList.remove("morph", "out");
+      });
+    }
+
+    async function run() {
+      while (true) {
+        clearAll();
+        document.getElementById("info").innerHTML =
+          '<span class="muted">Project the vision encoder output into the LLM embedding space.</span>';
+        await sleep(900);
+
+        document.getElementById("in").classList.add("node-blue");
+        document.getElementById("info").innerHTML =
+          '<span>Start with visual tokens from the vision encoder.</span><span class="shape">[B, N, feature_dim]</span>';
+        await sleep(1200);
+
+        document.getElementById("l1").classList.add("node-blue");
+        tokens.forEach(id => document.getElementById(id).classList.add("morph"));
+        document.getElementById("info").innerHTML =
+          '<span><strong>Linear 1</strong> remaps the raw feature channels.</span>';
+        await sleep(1200);
+
+        clearAll();
+        document.getElementById("gelu").classList.add("node-green");
+        tokens.forEach(id => document.getElementById(id).classList.add("morph"));
+        document.getElementById("info").innerHTML =
+          '<span><strong>GeLU</strong> adds a simple non-linearity for semantic alignment.</span>';
+        await sleep(1200);
+
+        clearAll();
+        document.getElementById("l2").classList.add("node-purple");
+        tokens.forEach(id => document.getElementById(id).classList.add("out"));
+        document.getElementById("info").innerHTML =
+          '<span><strong>Linear 2</strong> projects into the final LLM embedding dimension.</span>';
+        await sleep(1200);
+
+        clearAll();
+        document.getElementById("out").classList.add("node-purple");
+        tokens.forEach(id => document.getElementById(id).classList.add("out"));
+        document.getElementById("info").innerHTML =
+          '<span>Result: vision embeddings that can be merged with text embeddings.</span><span class="shape">[B, N, embed_dim]</span>';
+        await sleep(3000);
+      }
+    }
+
+    run();
+  </script>
+</body>
+</html>

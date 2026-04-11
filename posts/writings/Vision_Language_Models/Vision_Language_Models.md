@@ -13,23 +13,11 @@ VLMs change this by being able to handle all these tasks through natural languag
 Additionally, because VLMs understand both images and language, they can perform more complex reasoning tasks that combine both modalities, like answering detailed questions about images or comparing multiple images. This makes them particularly useful for real-world applications where flexibility and natural interaction are important.
 
 ## Architectures of Vision Language Models
-Although there are lots of VLMs out there, most VLMs share a very similar fundamental architecture that was first introduced in the LLaVA model (correct me if I'm wrong about LLaVA being the first). The architecture looks like this:
+Although there are lots of VLMs out there, most VLMs share a very similar fundamental architecture that was first introduced in the LLaVA model (correct me if I'm wrong about LLaVA being the first). The high level data flow looks like this:
 
+Here is an animated walkthrough of data flowing through the pipeline:
+<iframe src="/posts/writings/Vision_Language_Models/animations/vlm_architecture.html" width="100%" height="320" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
 
-```mermaid
-graph LR
-subgraph "Vision"
-I[Image] --> PR[Preprocessing] --> VE{Vision Encoder} --> V[Vision Features]
-end
-subgraph "Projection Layer"
-V --> P[Vision Embeddings]
-end
-subgraph "Language Model"
-P --> M[Merge] --> L{LLM Decoder Layers}
-T[Text Input] --> TE{Text Embedding Layer} --> TEMB[Text Embeddings] --> M
-L --> O[Text Output]
-end
-```
 Notably:
 - Vision Encoder: A neural network that turns an image into dense feature representations
     - Some common choices are CLIP, SigLIP
@@ -47,18 +35,9 @@ So in general, you have a vision encoder and projector combination that transfor
 Both the vision encoder and the language model backbone are typically already pretrained to start with.
 
 Among the more widely adopted VLMs, LLaMA Vision is the odd one out. The architecture of LLaMA Vision model looks like this instead:
-```mermaid
-graph LR
-subgraph "Vision"
-I[Image] --> VE{Vision Encoder} --> VF[Vision Features] --> P{Projector} --> CAS[Cross Attention State]
-end
-subgraph "VLM Backbone"
-T[Text Input] --> TE[Text Embedding] --> DL1[Decoder Layer 1] --> CAL1[Cross Attention Layer 1] --> DL2[Decoder Layer 2] --> CAL2[Cross Attention Layer 2] --> MORE[.....] --> CALM[Cross Attention Layer M] --> DLN[Decoder Layer N] --> TO[Text Output]
-end
-CAS --> CAL1
-CAS --> CAL2
-CAS --> CALM
-```
+
+<iframe src="/posts/writings/Vision_Language_Models/animations/vlm_llama_vision.html" width="100%" height="400" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
+
 Note that the above diagram is for illustration purposes. The interleaving and arrangment of the cross attention layers and regular decoder layers are different in the actual models. 
 
 So LLaMA Vision similarly encodes images into some feature representation, but uses cross attention layers to inject the vision features into the language model. LLaMA Vision models are also built on top of the language only models. The cross attention layers are interleavingly inserted into the decoder layers of a pretrained LLaMA model. During VLM training, all the weights from the language model (text embedding layer, decoder layers and LM head) are frozen. This is to ensure that the LLaMA Vision model behaves exactly the same as the original LLM if the input contains no image at all.
@@ -109,6 +88,10 @@ def select_best_resolution(original_size, possible_resolutions):
 
     return best_fit
 ```
+
+The following animation compares the three preprocessing approaches:
+<iframe src="/posts/writings/Vision_Language_Models/animations/vlm_preprocessing.html" width="100%" height="370" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
+
 This `scanning` technique is used in many open source VLMs such as LLaVA 1.5, LLaVA Next, Phi 3 Vision model although the exact resizing logic may be different.
 
 Notes on the the number of image tokens:
@@ -133,10 +116,9 @@ If you are not using CLIP or SigLIP, then you are not constrained by the fixed i
 
 ### Projection Layer
 Projection layer maps vision encoder output to text embedding space in the LLM backbone. Mechanically, the vision encoder output has shape `[Batch Size, Number of Visual Tokens, Feature Dim]`, and `feature dim` is usually different from the embedding dim of the LLM backbone. To be able to merge the vision features into text embeddings via simple concatenation (which most LLaVA style VLMs adopt), you need to project `feature dim` to `embedding dim`. That can be done with one linear layer. Semantically, you also want to remap the visual feature into the text embedding space, so some non-linear transformation is needed. A very common choice that seem to work pretty well is surprisingly simple:
-```mermaid
-graph LR
-X[Visual Feature] --> L1[Linear1] --> G[GeLU] --> L2[Linear2] --> O[output]
-```
+
+<iframe src="/posts/writings/Vision_Language_Models/animations/vlm_projector.html" width="100%" height="250" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
+
 VLMs using this projection architecture includes: LLaVA Family, Qwen 2 VL, Qwen 2.5 VL, Phi 3 Vision etc
 
 More complicated choices includes LLM style MLP (i.e gate up proj) combined with `perceiver` layers (similar to decoder layers) used in idefics2, and pixel shuffle combined with single linear projection in idefics3, and super simple single layer linear in PaliGemma.
@@ -144,17 +126,18 @@ More complicated choices includes LLM style MLP (i.e gate up proj) combined with
 ### Merging
 For LLaVA style VLMs, the merging of the vision features (vision embeddings) and text embeddings happen before the first LLM decoder layer. The vision embeddings are inserted into the text embeddings at certain locations in the sequence dimension. To explain how it works, let's start with a text query:
 
-```mermaid
-graph LR
-Given --> image --> token["<|image_token|>"] --> comma[","] --> please --> describe --> it --> period["."]
-```
+<iframe src="/posts/writings/Vision_Language_Models/animations/vlm_query_tokens.html" width="100%" height="210" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
+
 The text query would contain a special token `<|image_token|>` which gets tokenized into a special token `image_token_id`. Now assume that the supplied image gets projected into vision embeddings, and the shape is `[1, 576, Embedding Dim]`, and the text embeddings have shape `[1, 8, Embedding Dim]` where the embedding at index 2 is embedding of `image_token_id`. The merging basically replaces the single embedding for the `image_token_id` with the `[1, 576, Embedding Dim]` shaped vision embeddings.
 
-```mermaid
-graph LR
-A["[1, 2, Embedding Dim] for 'Given image'"] --> B["[1, 576, Embedding Dim] for image"] --> C["[1, 5, Embedding Dim] for ', please describe it.'"]
-```
+The resulting merged sequence can be thought of as prefix text, then the vision block, then suffix text:
+
+<iframe src="/posts/writings/Vision_Language_Models/animations/vlm_merge_segments.html" width="100%" height="250" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
+
 So you end up with a merged embedding of shape `[1, 583, Embedding Dim]` into the decoder layers.
+
+Here is an animation showing the merge step by step:
+<iframe src="/posts/writings/Vision_Language_Models/animations/vlm_merge.html" width="100%" height="370" scrolling="no" style="border:none; border-radius:8px; overflow:hidden;" loading="lazy"></iframe>
 
 ## Vision Language Model Training
 VLMs are often times second class citizen in the sense that they are typically not trained from scratch. It is more common to pick a pretrained vision encoder and pretrained LLM, glue them together with some projector layer, some merging mechanism, and perform a (relatively) lightweight training/fine-tuning to get a working VLM.
