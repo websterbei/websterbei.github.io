@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HDC / VSA</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { overflow: hidden; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: #fff; color: #1a1a1a; display: flex; justify-content: center;
+      padding: 20px 16px;
+    }
+    .container { width: 100%; max-width: 720px; }
+    .section-label {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.8px; color: #999; margin-bottom: 12px;
+    }
+    .phase-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 14px; }
+    .phase-step { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 600; color: #c0c0c0; transition: color 0.25s; }
+    .phase-step.active { color: #1a1a1a; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: #e0e0e0; transition: background 0.25s, box-shadow 0.25s; }
+    .phase-step.active .dot { background: #8b5cf6; box-shadow: 0 0 0 3px rgba(139,92,246,0.12); }
+    .arrow { color: #d0d0d0; }
+    .workspace {
+      background: #fafafa; border: 1px solid #e8e8e8; border-radius: 10px;
+      padding: 16px;
+    }
+    .grid { display: grid; grid-template-columns: 1fr 1.1fr 1fr; gap: 14px; align-items: stretch; }
+    .panel {
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 9px;
+      padding: 12px; min-height: 190px;
+    }
+    .title {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase;
+      color: #999; margin-bottom: 10px;
+    }
+    .hv { display: grid; grid-template-columns: repeat(12, 1fr); gap: 3px; margin-bottom: 9px; }
+    .bit {
+      height: 12px; border-radius: 3px; background: #e5e7eb;
+      transition: transform 0.25s, background 0.25s, opacity 0.25s;
+    }
+    .bit.pos { background: #60a5fa; }
+    .bit.neg { background: #f87171; }
+    .bit.active { transform: scale(1.25); }
+    .expr {
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-size: 12px; line-height: 1.55; color: #333;
+      background: #fafafa; border: 1px solid #eee; border-radius: 7px;
+      padding: 9px;
+    }
+    .chip {
+      display: inline-block; padding: 3px 7px; border-radius: 5px;
+      font-size: 12px; font-weight: 700; margin: 2px;
+      border: 1px solid #e5e7eb; background: #fff;
+    }
+    .role { color: #6d28d9; border-color: #ddd6fe; background: #f5f3ff; }
+    .value { color: #166534; border-color: #bbf7d0; background: #f0fdf4; }
+    .memory { color: #92400e; border-color: #fde68a; background: #fffbeb; }
+    .caption { margin-top: 13px; min-height: 40px; font-size: 13px; color: #555; line-height: 1.45; }
+    .caption b { color: #222; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="section-label">HDC / VSA: bind roles and values, then retrieve by unbinding</div>
+    <div class="phase-bar">
+      <div class="phase-step" id="p0"><span class="dot"></span>random vectors</div><span class="arrow">→</span>
+      <div class="phase-step" id="p1"><span class="dot"></span>bind</div><span class="arrow">→</span>
+      <div class="phase-step" id="p2"><span class="dot"></span>bundle</div><span class="arrow">→</span>
+      <div class="phase-step" id="p3"><span class="dot"></span>retrieve</div>
+    </div>
+    <div class="workspace">
+      <div class="grid">
+        <div class="panel">
+          <div class="title">hypervectors</div>
+          <div id="hvs"></div>
+        </div>
+        <div class="panel">
+          <div class="title">symbolic memory</div>
+          <div class="expr" id="expr"></div>
+        </div>
+        <div class="panel">
+          <div class="title">retrieval</div>
+          <div id="retrieval"></div>
+        </div>
+      </div>
+      <div class="caption" id="caption"></div>
+    </div>
+  </div>
+  <script>
+    const names = [
+      ["COLOR", "role"],
+      ["SHAPE", "role"],
+      ["red", "value"],
+      ["circle", "value"]
+    ];
+    const patterns = [
+      [1,0,1,1,0,0,1,0,1,0,1,0],
+      [0,1,0,1,1,0,0,1,0,1,0,1],
+      [1,1,0,0,1,0,1,1,0,0,1,0],
+      [0,0,1,0,1,1,0,1,1,0,0,1]
+    ];
+    const hvs = document.getElementById("hvs");
+    names.forEach(([name, cls], i) => {
+      const chip = document.createElement("span");
+      chip.className = `chip ${cls}`;
+      chip.textContent = name;
+      hvs.appendChild(chip);
+      const row = document.createElement("div");
+      row.className = "hv";
+      row.id = `hv${i}`;
+      patterns[i].forEach((v, j) => {
+        const b = document.createElement("div");
+        b.className = `bit ${v ? "pos" : "neg"}`;
+        b.id = `bit-${i}-${j}`;
+        row.appendChild(b);
+      });
+      hvs.appendChild(row);
+    });
+    const steps = [
+      {
+        phase: 0,
+        expr: "<span class='chip role'>COLOR</span>, <span class='chip role'>SHAPE</span>, <span class='chip value'>red</span>, <span class='chip value'>circle</span>",
+        retrieval: "<div class='expr'>Random high-dimensional vectors are almost orthogonal.</div>",
+        active: [0,1,2,3],
+        text: "<b>Start:</b> assign random hypervectors to roles and values. In high dimension, unrelated symbols are nearly orthogonal by default."
+      },
+      {
+        phase: 1,
+        expr: "<span class='chip role'>COLOR</span> ⊙ <span class='chip value'>red</span><br>+<br><span class='chip role'>SHAPE</span> ⊙ <span class='chip value'>circle</span>",
+        retrieval: "<div class='expr'>Binding creates role-value pairs.</div>",
+        active: [0,2,1,3],
+        text: "<b>Bind:</b> combine each role with its value, e.g. COLOR ⊙ red. For bipolar vectors, binding can be elementwise multiplication."
+      },
+      {
+        phase: 2,
+        expr: "<span class='chip memory'>M</span> = COLOR ⊙ red<br>+ SHAPE ⊙ circle",
+        retrieval: "<div class='expr'>Bundling adds multiple pairs into one memory vector.</div>",
+        active: [],
+        text: "<b>Bundle:</b> add the bound pairs together. Now one vector stores multiple symbolic facts."
+      },
+      {
+        phase: 3,
+        expr: "<span class='chip memory'>M</span> ⊙ <span class='chip role'>COLOR</span><br>≈ <span class='chip value'>red</span> + noise",
+        retrieval: "<div class='expr'>COLOR unbinds the memory and retrieves red. The SHAPE term becomes near-random noise.</div>",
+        active: [0,2],
+        text: "<b>Retrieve:</b> query with COLOR. Because COLOR ⊙ COLOR ≈ 1, the red vector comes back, while unrelated bound terms mostly look like noise."
+      }
+    ];
+    let idx = 0;
+    function render() {
+      const s = steps[idx];
+      document.querySelectorAll(".phase-step").forEach((el, i) => el.classList.toggle("active", i === s.phase));
+      document.querySelectorAll(".bit").forEach(el => el.classList.remove("active"));
+      s.active.forEach(row => {
+        for (let j = 0; j < 12; j++) document.getElementById(`bit-${row}-${j}`).classList.add("active");
+      });
+      document.getElementById("expr").innerHTML = s.expr;
+      document.getElementById("retrieval").innerHTML = s.retrieval;
+      document.getElementById("caption").innerHTML = s.text;
+      idx = (idx + 1) % steps.length;
+    }
+    render();
+    setInterval(render, 1900);
+  </script>
+</body>
+</html>

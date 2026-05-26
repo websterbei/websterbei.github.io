@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CDMA Codes</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { overflow: hidden; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: #fff; color: #1a1a1a; display: flex; justify-content: center;
+      padding: 20px 16px;
+    }
+    .container { width: 100%; max-width: 720px; }
+    .section-label {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.8px; color: #999; margin-bottom: 14px;
+    }
+    svg text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .panel { fill: #fafafa; stroke: #e8e8e8; stroke-width: 1.2; }
+    .code-chip { transition: fill 0.3s, stroke 0.3s, transform 0.3s; }
+    .chip-text { font-family: "SF Mono", Menlo, monospace; font-size: 13px; font-weight: 700; }
+    .muted { fill: #aaa; font-size: 11px; font-weight: 700; letter-spacing: 0.6px; }
+    .wave { fill: none; stroke-width: 3; stroke-linecap: round; transition: opacity 0.3s, stroke 0.3s; }
+    .arrow { stroke: #cfcfcf; stroke-width: 1.5; marker-end: url(#arrow); }
+    .eq { font-family: "SF Mono", Menlo, monospace; font-size: 13px; fill: #444; }
+    .caption { font-size: 13px; fill: #555; }
+    .strong { font-weight: 700; fill: #222; }
+    .fade { opacity: 0.2; }
+    .active { filter: drop-shadow(0 6px 10px rgba(37,99,235,0.15)); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="section-label">CDMA: mix signals, recover one by correlating with its code</div>
+    <svg viewBox="0 0 720 320" width="100%">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10z" fill="#cfcfcf"/>
+        </marker>
+      </defs>
+      <rect class="panel" x="8" y="35" width="205" height="218" rx="10"/>
+      <rect class="panel" x="258" y="35" width="205" height="218" rx="10"/>
+      <rect class="panel" x="508" y="35" width="205" height="218" rx="10"/>
+
+      <text class="muted" x="24" y="58">USERS</text>
+      <text class="muted" x="274" y="58">SHARED CHANNEL</text>
+      <text class="muted" x="524" y="58">MATCHED FILTER</text>
+
+      <g id="alice">
+        <rect class="code-chip" x="24" y="82" width="172" height="42" rx="8" fill="#dbeafe" stroke="#93c5fd"/>
+        <text x="40" y="107" class="chip-text" fill="#1d4ed8">Alice: bA · cA</text>
+      </g>
+      <g id="bob">
+        <rect class="code-chip" x="24" y="148" width="172" height="42" rx="8" fill="#dcfce7" stroke="#86efac"/>
+        <text x="40" y="173" class="chip-text" fill="#166534">Bob: bB · cB</text>
+      </g>
+
+      <path id="waveA" class="wave" stroke="#3b82f6" d="M32 220 L48 205 L64 220 L80 205 L96 205 L112 220 L128 205 L144 220 L160 220 L176 205"/>
+      <path id="waveB" class="wave" stroke="#22c55e" d="M32 235 L48 235 L64 220 L80 220 L96 235 L112 220 L128 220 L144 235 L160 220 L176 235"/>
+
+      <line class="arrow" x1="213" y1="144" x2="258" y2="144"/>
+      <text class="eq" x="286" y="112">r = bA cA + bB cB + n</text>
+      <path id="mix" class="wave" stroke="#8b5cf6" d="M286 166 L306 136 L326 166 L346 136 L366 151 L386 166 L406 136 L426 166"/>
+      <text class="caption" x="286" y="210">The receiver observes the sum.</text>
+
+      <line class="arrow" x1="463" y1="144" x2="508" y2="144"/>
+      <text class="eq" x="532" y="100">⟨r, cA⟩</text>
+      <text class="eq" x="532" y="134">= bA⟨cA,cA⟩</text>
+      <text id="cross" class="eq" x="532" y="164">+ bB⟨cB,cA⟩</text>
+      <text class="eq" x="532" y="194">+ noise</text>
+      <text id="result" class="caption" x="532" y="230">Bob disappears if cB ⟂ cA.</text>
+      <text id="stage" class="caption strong" x="24" y="292">Step 1: Alice and Bob transmit at the same time with different codes.</text>
+    </svg>
+  </div>
+  <script>
+    const stages = [
+      { text: "Step 1: Alice and Bob transmit at the same time with different codes.", fadeA: false, fadeB: false, cross: "#444", result: "Bob is still present in the channel mixture." },
+      { text: "Step 2: Receiver correlates the mixture with Alice's code cA.", fadeA: false, fadeB: true, cross: "#bbb", result: "The intended term stays large." },
+      { text: "Step 3: Because cB has low dot product with cA, Bob becomes small interference.", fadeA: false, fadeB: true, cross: "#ef4444", result: "Near-orthogonal codes separate users." }
+    ];
+    let i = 0;
+    function render() {
+      const s = stages[i];
+      document.getElementById("waveA").classList.toggle("fade", s.fadeA);
+      document.getElementById("waveB").classList.toggle("fade", s.fadeB);
+      document.getElementById("bob").classList.toggle("fade", s.fadeB);
+      document.getElementById("alice").classList.add("active");
+      document.getElementById("cross").setAttribute("fill", s.cross);
+      document.getElementById("stage").textContent = s.text;
+      document.getElementById("result").textContent = s.result;
+      i = (i + 1) % stages.length;
+    }
+    render();
+    setInterval(render, 1800);
+  </script>
+</body>
+</html>

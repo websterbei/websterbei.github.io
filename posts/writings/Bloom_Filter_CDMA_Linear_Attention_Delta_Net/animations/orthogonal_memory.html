@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Orthogonal Memory</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { overflow: hidden; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: #fff; color: #1a1a1a; display: flex; justify-content: center;
+      padding: 20px 16px;
+    }
+    .container { width: 100%; max-width: 720px; }
+    .section-label {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.8px; color: #999; margin-bottom: 12px;
+    }
+    svg text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .panel { fill: #fafafa; stroke: #e8e8e8; stroke-width: 1.2; }
+    .axis { stroke: #ddd; stroke-width: 1; }
+    .vec { stroke-width: 4; stroke-linecap: round; marker-end: url(#arrow); transition: opacity 0.3s, stroke-width 0.3s; }
+    .ghost { opacity: 0.22; }
+    .query { stroke: #8b5cf6; }
+    .good { stroke: #22c55e; }
+    .bad { stroke: #ef4444; }
+    .blue { stroke: #3b82f6; }
+    .label { font-size: 12px; font-weight: 700; fill: #444; }
+    .muted { font-size: 11px; font-weight: 700; letter-spacing: 0.6px; fill: #999; }
+    .caption { font-size: 13px; fill: #555; }
+    .formula { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 13px; fill: #333; }
+    .active { stroke-width: 6; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="section-label">The shared picture: retrieval is clean when addresses are orthogonal</div>
+    <svg viewBox="0 0 720 320" width="100%">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect class="panel" x="12" y="36" width="330" height="220" rx="10"/>
+      <rect class="panel" x="378" y="36" width="330" height="220" rx="10"/>
+
+      <text class="muted" x="30" y="60">LOW INTERFERENCE</text>
+      <text class="muted" x="396" y="60">HIGH INTERFERENCE</text>
+
+      <line class="axis" x1="60" y1="190" x2="300" y2="190"/>
+      <line class="axis" x1="120" y1="232" x2="120" y2="78"/>
+      <line class="axis" x1="426" y1="190" x2="666" y2="190"/>
+      <line class="axis" x1="486" y1="232" x2="486" y2="78"/>
+
+      <line id="q1" class="vec query active" x1="120" y1="190" x2="260" y2="190"/>
+      <line id="g1" class="vec good" x1="120" y1="190" x2="120" y2="90"/>
+      <line id="b1" class="vec blue" x1="120" y1="190" x2="205" y2="112"/>
+
+      <line id="q2" class="vec query active" x1="486" y1="190" x2="626" y2="190"/>
+      <line id="g2" class="vec bad" x1="486" y1="190" x2="612" y2="145"/>
+      <line id="b2" class="vec blue" x1="486" y1="190" x2="604" y2="126"/>
+
+      <text class="label" x="250" y="178">query</text>
+      <text class="label" x="126" y="96">other key</text>
+      <text class="label" x="198" y="110">target key</text>
+
+      <text class="label" x="612" y="178">query</text>
+      <text class="label" x="602" y="143">other key</text>
+      <text class="label" x="590" y="124">target key</text>
+
+      <text class="formula" x="38" y="286">k_otherᵀ q ≈ 0 → it mostly disappears</text>
+      <text class="formula" x="398" y="286">k_otherᵀ q large → it leaks into retrieval</text>
+      <text id="caption" class="caption" x="28" y="30">Addresses are just directions. Dot product controls how much each stored thing responds to a query.</text>
+    </svg>
+  </div>
+  <script>
+    const states = [
+      { q: true, g: false, b: false, text: "Probe the shared memory with a query direction." },
+      { q: true, g: true, b: false, text: "Orthogonal directions have near-zero dot product, so unrelated memories stay quiet." },
+      { q: true, g: true, b: true, text: "When directions overlap, unrelated memories respond too. That is interference." }
+    ];
+    let i = 0;
+    function render() {
+      const s = states[i];
+      ["q1","q2"].forEach(id => document.getElementById(id).classList.toggle("ghost", !s.q));
+      ["g1","g2"].forEach(id => document.getElementById(id).classList.toggle("ghost", !s.g));
+      ["b1","b2"].forEach(id => document.getElementById(id).classList.toggle("ghost", !s.b));
+      document.getElementById("caption").textContent = s.text;
+      i = (i + 1) % states.length;
+    }
+    render();
+    setInterval(render, 1800);
+  </script>
+</body>
+</html>

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bloom Filter</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { overflow: hidden; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: #fff; color: #1a1a1a;
+      display: flex; justify-content: center;
+      padding: 20px 16px;
+    }
+    .container { width: 100%; max-width: 720px; }
+    .section-label {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.8px; color: #999; margin-bottom: 12px;
+    }
+    .phase-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 18px; }
+    .phase-step { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 600; color: #c0c0c0; transition: color 0.25s; }
+    .phase-step.active { color: #1a1a1a; }
+    .phase-dot { width: 9px; height: 9px; border-radius: 50%; background: #e0e0e0; transition: background 0.25s, box-shadow 0.25s; }
+    .phase-step.active .phase-dot { box-shadow: 0 0 0 3px rgba(0,0,0,0.06); }
+    .phase-arrow { color: #d0d0d0; }
+    .workspace {
+      display: grid; grid-template-columns: 180px 1fr; gap: 18px;
+      background: #fafafa; border: 1px solid #e8e8e8; border-radius: 10px;
+      padding: 18px;
+    }
+    .items { display: flex; flex-direction: column; gap: 10px; }
+    .item {
+      border: 1px solid #e5e7eb; background: #fff; border-radius: 8px;
+      padding: 10px 12px; font-weight: 650; color: #aaa;
+      transition: all 0.25s ease;
+    }
+    .item.active { color: #1d4ed8; border-color: #93c5fd; background: #dbeafe; }
+    .item.query { color: #92400e; border-color: #fcd34d; background: #fef3c7; }
+    .hashes { margin-top: 4px; font-size: 11px; font-family: "SF Mono", Menlo, monospace; color: #777; }
+    .bits-wrap { min-width: 0; }
+    .bit-label {
+      display: grid; grid-template-columns: repeat(16, 1fr);
+      gap: 5px; margin-bottom: 6px; color: #aaa; font-size: 10px;
+      font-family: "SF Mono", Menlo, monospace; text-align: center;
+    }
+    .bits { display: grid; grid-template-columns: repeat(16, 1fr); gap: 5px; }
+    .bit {
+      height: 36px; border-radius: 7px; border: 1px solid #e5e7eb;
+      background: #fff; display: flex; align-items: center; justify-content: center;
+      font-family: "SF Mono", Menlo, monospace; font-size: 13px; font-weight: 700;
+      color: #c0c0c0; transition: all 0.25s ease;
+    }
+    .bit.on { background: #dcfce7; border-color: #86efac; color: #166534; }
+    .bit.touch { transform: translateY(-4px); box-shadow: 0 8px 18px rgba(37,99,235,0.16); border-color: #60a5fa; }
+    .bit.false-pos { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+    .caption {
+      margin-top: 14px; min-height: 42px; font-size: 13px; color: #555;
+      line-height: 1.45;
+    }
+    .caption b { color: #222; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="section-label">Bloom filter: write sparse signatures into one bit array</div>
+    <div class="phase-bar">
+      <div class="phase-step" id="p0"><span class="phase-dot"></span>insert apple</div>
+      <span class="phase-arrow">→</span>
+      <div class="phase-step" id="p1"><span class="phase-dot"></span>insert banana</div>
+      <span class="phase-arrow">→</span>
+      <div class="phase-step" id="p2"><span class="phase-dot"></span>query dog</div>
+    </div>
+    <div class="workspace">
+      <div class="items">
+        <div class="item" id="apple">apple<div class="hashes">h(x) = 1, 6, 12</div></div>
+        <div class="item" id="banana">banana<div class="hashes">h(x) = 3, 6, 14</div></div>
+        <div class="item" id="dog">dog?<div class="hashes">h(x) = 1, 3, 14</div></div>
+      </div>
+      <div class="bits-wrap">
+        <div class="bit-label" id="labels"></div>
+        <div class="bits" id="bits"></div>
+        <div class="caption" id="caption"></div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const bitsEl = document.getElementById("bits");
+    const labelsEl = document.getElementById("labels");
+    const caption = document.getElementById("caption");
+    const bitCount = 16;
+    for (let i = 0; i < bitCount; i++) {
+      const label = document.createElement("div");
+      label.textContent = i;
+      labelsEl.appendChild(label);
+      const bit = document.createElement("div");
+      bit.className = "bit";
+      bit.id = `b${i}`;
+      bit.textContent = "0";
+      bitsEl.appendChild(bit);
+    }
+    const steps = [
+      { phase: 0, active: "apple", on: [1, 6, 12], touch: [1, 6, 12], text: "<b>Insert apple:</b> set the positions selected by its hash functions." },
+      { phase: 1, active: "banana", on: [1, 3, 6, 12, 14], touch: [3, 6, 14], text: "<b>Insert banana:</b> another item writes into the same shared bit array. Position 6 is a collision." },
+      { phase: 2, active: "dog", query: true, on: [1, 3, 6, 12, 14], touch: [1, 3, 14], falsePos: [1, 3, 14], text: "<b>Query dog:</b> all of dog&apos;s positions are already 1, so the filter says probably yes even though dog was never inserted." }
+    ];
+    let idx = 0;
+    function render() {
+      const s = steps[idx];
+      document.querySelectorAll(".phase-step").forEach((el, i) => el.classList.toggle("active", i === s.phase));
+      document.querySelectorAll(".item").forEach(el => { el.classList.remove("active", "query"); });
+      document.getElementById(s.active).classList.add(s.query ? "query" : "active");
+      for (let i = 0; i < bitCount; i++) {
+        const bit = document.getElementById(`b${i}`);
+        bit.className = "bit";
+        bit.textContent = "0";
+        if (s.on.includes(i)) { bit.classList.add("on"); bit.textContent = "1"; }
+        if (s.touch.includes(i)) bit.classList.add("touch");
+        if (s.falsePos && s.falsePos.includes(i)) bit.classList.add("false-pos");
+      }
+      caption.innerHTML = s.text;
+      idx = (idx + 1) % steps.length;
+    }
+    render();
+    setInterval(render, 1700);
+  </script>
+</body>
+</html>

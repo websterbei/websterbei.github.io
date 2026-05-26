@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Delta Net Update</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { overflow: hidden; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: #fff; color: #1a1a1a; display: flex; justify-content: center;
+      padding: 20px 16px;
+    }
+    .container { width: 100%; max-width: 720px; }
+    .section-label {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.8px; color: #999; margin-bottom: 14px;
+    }
+    .phase-bar { display: flex; gap: 6px; align-items: center; margin-bottom: 16px; }
+    .phase-step { display: flex; gap: 5px; align-items: center; color: #c0c0c0; font-size: 13px; font-weight: 600; transition: color 0.25s; }
+    .phase-step.active { color: #1a1a1a; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: #e0e0e0; }
+    .phase-step.active .dot { box-shadow: 0 0 0 3px rgba(0,0,0,0.06); background: #3b82f6; }
+    .arrow { color: #d0d0d0; }
+    .workspace {
+      background: #fafafa; border: 1px solid #e8e8e8; border-radius: 10px;
+      padding: 18px;
+    }
+    .row { display: grid; grid-template-columns: 150px 1fr 150px; gap: 16px; align-items: center; }
+    .card {
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 9px;
+      padding: 12px; text-align: center; min-height: 78px;
+      transition: all 0.25s ease;
+    }
+    .card.active { border-color: #93c5fd; background: #dbeafe; transform: translateY(-3px); }
+    .label {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;
+      color: #999; margin-bottom: 8px;
+    }
+    .formula { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 13px; font-weight: 700; color: #333; }
+    .memory {
+      display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px;
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 9px; padding: 10px;
+    }
+    .cell {
+      height: 28px; border-radius: 5px; background: #f4f4f5; border: 1px solid #e4e4e7;
+      transition: all 0.25s ease;
+    }
+    .cell.old { background: #dbeafe; border-color: #93c5fd; }
+    .cell.delta { background: #fef3c7; border-color: #fcd34d; transform: scale(1.08); }
+    .cell.new { background: #dcfce7; border-color: #86efac; }
+    .caption { margin-top: 14px; min-height: 40px; color: #555; font-size: 13px; line-height: 1.45; }
+    .caption b { color: #222; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="section-label">Delta net: write the correction, not just the value</div>
+    <div class="phase-bar">
+      <div class="phase-step" id="p0"><span class="dot"></span>predict</div><span class="arrow">→</span>
+      <div class="phase-step" id="p1"><span class="dot"></span>error</div><span class="arrow">→</span>
+      <div class="phase-step" id="p2"><span class="dot"></span>update</div>
+    </div>
+    <div class="workspace">
+      <div class="row">
+        <div class="card" id="left">
+          <div class="label">current memory</div>
+          <div class="formula">Mᵢ₋₁ kᵢ = v̂ᵢ</div>
+        </div>
+        <div class="memory" id="memory"></div>
+        <div class="card" id="right">
+          <div class="label">target value</div>
+          <div class="formula">vᵢ</div>
+        </div>
+      </div>
+      <div class="caption" id="caption"></div>
+    </div>
+  </div>
+  <script>
+    const memory = document.getElementById("memory");
+    for (let i = 0; i < 30; i++) {
+      const c = document.createElement("div");
+      c.className = "cell";
+      c.id = `m${i}`;
+      memory.appendChild(c);
+    }
+    const base = [2, 3, 8, 9, 14, 15, 20, 21];
+    const delta = [10, 11, 16, 17, 22, 23];
+    const steps = [
+      { phase: 0, left: true, right: false, cls: "old", cells: base, text: "<b>Predict:</b> first read from the current fast-weight memory using the key kᵢ." },
+      { phase: 1, left: true, right: true, cls: "delta", cells: delta, text: "<b>Compute residual:</b> compare the target value vᵢ with the current prediction v̂ᵢ = Mᵢ₋₁kᵢ." },
+      { phase: 2, left: false, right: false, cls: "new", cells: base.concat(delta), text: "<b>Update:</b> write βᵢ(vᵢ - Mᵢ₋₁kᵢ)kᵢᵀ, so memory changes only by the needed correction." }
+    ];
+    let idx = 0;
+    function render() {
+      const s = steps[idx];
+      document.querySelectorAll(".phase-step").forEach((el, i) => el.classList.toggle("active", i === s.phase));
+      document.getElementById("left").classList.toggle("active", s.left);
+      document.getElementById("right").classList.toggle("active", s.right);
+      document.querySelectorAll(".cell").forEach(el => { el.className = "cell"; });
+      base.forEach(id => document.getElementById(`m${id}`).classList.add("old"));
+      s.cells.forEach(id => document.getElementById(`m${id}`).classList.add(s.cls));
+      document.getElementById("caption").innerHTML = s.text;
+      idx = (idx + 1) % steps.length;
+    }
+    render();
+    setInterval(render, 1800);
+  </script>
+</body>
+</html>

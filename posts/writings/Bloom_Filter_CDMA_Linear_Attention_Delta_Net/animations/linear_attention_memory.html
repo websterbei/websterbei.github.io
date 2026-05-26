@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Linear Attention Memory</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { overflow: hidden; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: #fff; color: #1a1a1a; display: flex; justify-content: center;
+      padding: 20px 16px;
+    }
+    .container { width: 100%; max-width: 720px; }
+    .section-label {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.8px; color: #999; margin-bottom: 12px;
+    }
+    .grid { display: grid; grid-template-columns: 220px 1fr 150px; gap: 16px; align-items: stretch; }
+    .box {
+      background: #fafafa; border: 1px solid #e8e8e8; border-radius: 10px;
+      padding: 14px; min-height: 250px;
+    }
+    .title {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.7px; color: #999; margin-bottom: 12px;
+    }
+    .token {
+      border: 1px solid #e5e7eb; background: #fff; border-radius: 8px;
+      padding: 9px 10px; margin-bottom: 9px; color: #aaa;
+      transition: all 0.25s ease;
+    }
+    .token.active { color: #1d4ed8; background: #dbeafe; border-color: #93c5fd; transform: translateX(4px); }
+    .mono { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12px; }
+    .matrix {
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px;
+      margin-top: 6px;
+    }
+    .cell {
+      height: 34px; border-radius: 6px; border: 1px solid #e5e7eb;
+      background: #fff; transition: all 0.25s ease;
+    }
+    .cell.on1 { background: #dbeafe; border-color: #93c5fd; }
+    .cell.on2 { background: #dcfce7; border-color: #86efac; }
+    .cell.on3 { background: #fef3c7; border-color: #fcd34d; }
+    .cell.hot { transform: scale(1.08); box-shadow: 0 7px 14px rgba(0,0,0,0.08); }
+    .readout {
+      display: flex; flex-direction: column; gap: 10px; justify-content: center; height: 205px;
+      text-align: center;
+    }
+    .query {
+      padding: 10px; border-radius: 8px; background: #f5f3ff;
+      border: 1px solid #ddd6fe; color: #6d28d9; font-weight: 700;
+    }
+    .arrow { color: #ccc; font-size: 22px; }
+    .value {
+      padding: 10px; border-radius: 8px; background: #fff7ed;
+      border: 1px solid #fed7aa; color: #c2410c; font-weight: 700;
+      min-height: 42px;
+    }
+    .caption { margin-top: 14px; min-height: 38px; font-size: 13px; color: #555; line-height: 1.45; }
+    .caption b { color: #222; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="section-label">Linear attention: turn a list of key-value pairs into one running matrix</div>
+    <div class="grid">
+      <div class="box">
+        <div class="title">incoming tokens</div>
+        <div class="token" id="t0"><b>token 1</b><div class="mono">write v1 k1ᵀ</div></div>
+        <div class="token" id="t1"><b>token 2</b><div class="mono">write v2 k2ᵀ</div></div>
+        <div class="token" id="t2"><b>token 3</b><div class="mono">write v3 k3ᵀ</div></div>
+        <div class="token" id="t3"><b>query</b><div class="mono">read M φ(q)</div></div>
+      </div>
+      <div class="box">
+        <div class="title">compressed memory M</div>
+        <div class="matrix" id="matrix"></div>
+      </div>
+      <div class="box">
+        <div class="title">retrieval</div>
+        <div class="readout">
+          <div class="query" id="query">φ(q)</div>
+          <div class="arrow">↓</div>
+          <div class="value" id="value">waiting</div>
+        </div>
+      </div>
+    </div>
+    <div class="caption" id="caption"></div>
+  </div>
+  <script>
+    const matrix = document.getElementById("matrix");
+    for (let i = 0; i < 25; i++) {
+      const c = document.createElement("div");
+      c.className = "cell";
+      c.id = `c${i}`;
+      matrix.appendChild(c);
+    }
+    const writes = [
+      { token: 0, cls: "on1", cells: [1, 2, 7, 8, 13], value: "stored v1", text: "<b>Token 1:</b> write one outer product into the recurrent memory." },
+      { token: 1, cls: "on2", cells: [5, 6, 11, 16, 17], value: "stored v1 + v2", text: "<b>Token 2:</b> another key-value pair is added into the same matrix." },
+      { token: 2, cls: "on3", cells: [8, 9, 13, 14, 19], value: "stored v1 + v2 + v3", text: "<b>Token 3:</b> overlapping cells show where writes collide in the compressed state." },
+      { token: 3, cls: "hot", cells: [8, 13, 14], value: "mostly v3 + leakage", text: "<b>Read:</b> query with φ(q). If the query aligns with multiple stored keys, retrieval becomes a mixture." }
+    ];
+    let step = 0;
+    function render() {
+      const s = writes[step];
+      document.querySelectorAll(".token").forEach((el, i) => el.classList.toggle("active", i === s.token));
+      document.querySelectorAll(".cell").forEach(el => { el.className = "cell"; });
+      for (let j = 0; j <= Math.min(step, 2); j++) {
+        writes[j].cells.forEach(id => document.getElementById(`c${id}`).classList.add(writes[j].cls));
+      }
+      s.cells.forEach(id => document.getElementById(`c${id}`).classList.add("hot"));
+      document.getElementById("value").textContent = s.value;
+      document.getElementById("caption").innerHTML = s.text;
+      step = (step + 1) % writes.length;
+    }
+    render();
+    setInterval(render, 1700);
+  </script>
+</body>
+</html>
