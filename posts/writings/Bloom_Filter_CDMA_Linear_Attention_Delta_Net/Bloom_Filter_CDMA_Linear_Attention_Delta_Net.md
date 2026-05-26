@@ -11,7 +11,7 @@ This post is about four concepts that come from very different places but closel
 
 Personally for me, I also learned about these concepts in the past couple years under different circumstances. I first learned about bloom filter in college from Duke CS 290 (special topic class, so the topics rotate every semester under the same code) Algorithmic Foundation in Data Science. The second was CDMA, learned in Duke CS 356 Computer Networking Architecture class. The third, HDC/VSA, I got introduced by Allen Pan now an electrical engineering PhD student at Stanford. At the time he was doing his masters at Berkeley and we collaborated on a research paper for using VSA/HDC to accelerate object detection (which unfortunately never got published). And the last, linear attention and delta net that I only learned after joining fireworks and started working on language models.
 
-These concepts seem highly uncorrelated, yet share the same fundamental idea in Mathematics. So I figured, maybe introducing all of them in the same blogpost, threading through with this Mathematical idea, could ~~make me famous~~ be more inspirational.
+These concepts seem highly unrelated, yet share the same fundamental idea in Mathematics. So I figured, maybe introducing all of them in the same blogpost, threading through with this Mathematical idea, could ~~make me famous~~ be more inspirational.
 
 ---
 
